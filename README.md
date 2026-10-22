@@ -7,6 +7,7 @@ Jogo de triagem em pixel art feito pela **Valtore**. Você é o fiscal do Portã
 - **Facções:** Humanistas querem salvar todos; Pragmáticos, só os úteis. Qualquer uma em zero é motim.
 - **A cura** depende de cientistas e médicos vivos. Vários finais, conforme suas escolhas.
 - O progresso é salvo ao fim de cada noite.
+- **Português e inglês:** escolha na tela de abertura (o padrão segue o idioma do aparelho).
 
 ## Jogar
 
