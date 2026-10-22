@@ -1964,7 +1964,62 @@ const CASOS = [
   { id: "laboratorio", cond: () => (S.workers.pesquisa || 0) >= 1 && S.base.energia > 15, make: () => { const a = pick(S.moradores.filter(m => m.role === "pesquisa")); return { titulo: "O laboratório", quem: a,
     falas: [[a, "Preciso do gerador só para o laboratório esta noite. Acho que estou perto de algo."]],
     opts: [{ t: "Dar a energia", h: 0, p: 2, fx: () => { S.pesquisa = Math.min(100, S.pesquisa + 10); addRes("energia", -12); return "Pesquisa +10%. Energia −12."; } },
-      { t: "Negar", h: 0, p: -1, fx: () => "O laboratório fica no escuro hoje." }] }; } },
+      { t: "Negar", h: 0, p: -1, fx: () => "O laboratório fica no escuro hoje." }] }; } },  { id: "gravida", cond: () => S.moradores.some(m => m.fem && !m.crianca && m.idade < 42), make: () => { const a = pick(livres().filter(m => m.fem && !m.crianca && m.idade < 42)); return a && { titulo: "A gravidez", quem: a,
+    falas: [[a, "Eu estou grávida. De quatro meses."], [a, "Eu preciso de ração dobrada. Não por mim."]],
+    opts: [{ t: "Dar ração dobrada", h: 6, p: -3, fx: () => { addRes("comida", -6); return "Comida −6. Pela primeira vez em semanas, alguém fala em futuro no refeitório."; } },
+      { t: "Ração igual para todos", h: -6, p: 3, fx: () => `${a.nome} não discute. Só leva a mão à barriga e vai dormir.` }] }; } },
+  { id: "casamento", cond: () => livres().filter(m => !m.crianca).length >= 6, make: () => { const a = umAdulto(), b = umAdulto([a]); return b && { titulo: "O casamento", quem: a, alvo: b,
+    falas: [[a, `Eu e ${b.nome.split(" ")[0]} queremos nos casar amanhã.`], [b, "Uma festa pequena. Um pouco de comida, um pouco de música. Só isso."]],
+    opts: [{ t: "Permitir a festa", h: 6, p: 1, fx: () => { addRes("comida", -4); addRes("saude", 3); return "Comida −4. A base dança em volta da fogueira. Saúde +3."; } },
+      { t: "Proibir", h: -4, p: 2, fx: () => "Eles se casam mesmo assim, escondidos, sem festa." }] }; } },
+  { id: "arma", cond: () => livres().length >= 4, make: () => { const a = umAdulto(), d = umAdulto([a]); return d && { titulo: "A pistola", quem: d, alvo: a,
+    falas: [[d, `${a.nome} tem uma pistola escondida no colchão. Eu vi.`], [a, "É para proteger a minha família. De vocês, se precisar."]],
+    opts: [{ t: "Confiscar a arma", h: -1, p: 4, fx: () => `A pistola vai para o posto do fiscal. ${a.nome} não olha mais para você.` },
+      { t: "Deixar com a pessoa", h: 2, p: -4, fx: () => "A arma fica. Metade da sala passa a dormir com um olho aberto." },
+      { t: `Expulsar ${a.nome.split(" ")[0]}`, h: -4, p: 3, fx: () => { tirarMorador(a); S.expulsos.push({ nome: a.nome, dia: S.day }); return `${a.nome} sai pelo portão. Sem a arma.`; } }] }; } },
+  { id: "cobaia", cond: () => (S.workers.pesquisa || 0) >= 1 && S.moradores.some(m => !m.role && !m.crianca), make: () => { const c = pick(S.moradores.filter(m => m.role === "pesquisa")), v = pick(livres([c]).filter(m => !m.role && !m.crianca)); return c && v && { titulo: "A cobaia", quem: c, alvo: v,
+    falas: [[c, "Eu tenho uma vacina experimental. Preciso testar em alguém."], [v, "Eu me ofereço. Pelo menos assim eu sirvo para alguma coisa."]],
+    opts: [{ t: "Autorizar o teste", h: -2, p: 3, fx: () => {
+        S.pesquisa = Math.min(100, S.pesquisa + 15);
+        if (chance(.4)) { tirarMorador(v); S.mortosBase.push({ nome: v.nome, causa: "teste da vacina", dia: S.day }); fac(-6, 0, "Morte no teste"); return `Pesquisa +15%. ${v.nome} teve uma convulsão de madrugada e não acordou.`; }
+        return `Pesquisa +15%. ${v.nome} passou a noite com febre, mas sobreviveu.`; } },
+      { t: "Proibir testes em pessoas", h: 4, p: -3, fx: () => "A vacina volta para a geladeira do laboratório." }] }; } },
+  { id: "radio", cond: () => S.base.comida >= 15, make: () => { const a = pick(S.moradores.filter(m => m.role === "energia")) || umAdulto(); return { titulo: "O rádio", quem: a,
+    falas: [[a, "O rádio pegou a Zona 9. Eles mandam um médico para cá em troca de 15 rações."], [null, "A voz no rádio some e volta, cortada pela estática.", "Refeitório"]],
+    opts: [{ t: "Aceitar a troca", h: 2, p: 2, fx: () => { addRes("comida", -15); const m = makeMorador("saude"); m.dias = 0; admit(m, true); renderBase(); return `Comida −15. ${m.nome}, ${m.oficio}, chega ao amanhecer.`; } },
+      { t: "Recusar", h: 0, p: -1, fx: () => "O rádio fica mudo pelo resto da noite." }] }; } },
+  { id: "cachorro", cond: () => S.moradores.some(m => m.crianca), make: () => { const c = pick(livres().filter(m => m.crianca)); return c && { titulo: "O cachorro", quem: c,
+    falas: [[c, "Eu achei um cachorro perto do muro. Ele tá magrinho. Posso ficar com ele?"]],
+    opts: [{ t: "Pode ficar", h: 5, p: -2, fx: () => { addRes("comida", -5); addRes("muro", 4); return "Comida −5. O cachorro late quando os mortos chegam perto do muro: muro +4."; } },
+      { t: "Mandar o cachorro embora", h: -6, p: 2, fx: () => `${c.nome.split(" ")[0]} chora a noite inteira.` }] }; } },
+  { id: "reza", make: () => { const a = umAdulto(); return { titulo: "A reza", quem: a,
+    falas: [[a, "Eu queria reunir quem quiser para rezar, todo fim de tarde. A gente precisa de alguma coisa para acreditar."]],
+    opts: [{ t: "Permitir", h: 4, p: 1, fx: () => { addRes("muro", -3); return "Uma hora a menos de trabalho por dia: muro −3. Mas o refeitório fica mais calmo."; } },
+      { t: "Proibir", h: -4, p: 1, fx: () => "Eles rezam baixinho, cada um na sua cama." }] }; } },
+  { id: "pesadelos", cond: () => livres().length >= 4, make: () => { const a = umAdulto(), b = umAdulto([a]); return b && { titulo: "Os pesadelos", quem: b, alvo: a,
+    falas: [[b, `${a.nome} acorda gritando toda noite. Ninguém consegue dormir.`], [a, "Eu vejo eles. Toda vez que fecho os olhos, eu vejo eles."]],
+    opts: [{ t: "Dar calmante", h: 2, p: 0, fx: () => { addRes("saude", -6); return `${a.nome} dorme pela primeira vez em dias. Saúde da base −6.`; } },
+      { t: "Dormir no isolamento por 1 noite", h: -3, p: 2, fx: () => { a.isolado = 1; recount(); return `${a.nome} vai para o contêiner de isolamento. Não trabalha amanhã.`; } },
+      { t: "Não fazer nada", h: 0, p: -2, fx: () => { addRes("muro", -3); addRes("comida", -3); return "Ninguém dorme direito. Muro −3, comida −3."; } }] }; } },
+  { id: "culpa_fiscal", cond: () => S.mortosBase.length >= 3, make: () => { const a = umAdulto(); const n = S.mortosBase.length; return { titulo: "A culpa", quem: a,
+    falas: [[a, `Desde que você assumiu o portão, ${n} pessoas morreram aqui dentro.`], [a, "Quem decide quem entra decide quem morre. E quem decide é você."]],
+    opts: [{ t: "Pedir desculpas em público", h: 5, p: -3, fx: () => "A sala fica em silêncio. Alguns acenam com a cabeça." },
+      { t: "Lembrar que sem você todos estariam mortos", h: -3, p: 4, fx: () => "Ninguém responde. Mas ninguém concorda em voz alta." },
+      { t: "Ameaçar quem falou", h: -8, p: 2, fx: () => `${a.nome} se cala. A sala inteira também.` }] }; } },
+  { id: "corpos", cond: () => S.mortosBase.length >= 2, make: () => { const a = umAdulto(); return { titulo: "Os corpos", quem: a,
+    falas: [[a, "Os corpos estão no contêiner frio há dias. Ou enterramos lá fora, ou queimamos."]],
+    opts: [{ t: "Enterrar fora do muro", h: 4, p: -2, fx: () => { addRes("muro", -5); return "Abriram o portão de madrugada para o enterro. Os mortos sentiram o cheiro: muro −5."; } },
+      { t: "Queimar", h: -3, p: 3, fx: () => { addRes("energia", -6); addRes("saude", 4); return "Energia −6 para manter o fogo. Sem risco de doença: saúde +4."; } }] }; } },
+  { id: "estragou", cond: () => S.base.comida >= 10, make: () => { const a = pick(S.moradores.filter(m => m.role === "comida")) || umAdulto(); return { titulo: "O arroz molhado", quem: a,
+    falas: [[a, "A chuva entrou no depósito. Metade do arroz pegou umidade e está mofando."]],
+    opts: [{ t: "Jogar fora", h: 0, p: -1, fx: () => { addRes("comida", -8); return "Comida −8."; } },
+      { t: "Comer assim mesmo", h: -2, p: 2, fx: () => { addRes("saude", -10); return "Ninguém passa fome hoje. Mas meia base passa a noite com dor de barriga: saúde −10."; } }] }; } },
+  { id: "batida", make: () => { const v = pick(S.moradores.filter(m => m.role === "muro")) || umAdulto(); const f = makePerson(Math.max(1, S.day)); if (f.infected) f.inc = 1;
+    return { titulo: "A batida no portão", quem: v,
+      falas: [[v, "Tem alguém batendo no portão. No meio da noite."], [null, `Uma voz do outro lado: “Por favor! Meu nome é ${f.nome}! Eu sou ${f.oficio}! Abre, eles estão vindo!”`, "Portão"]],
+      opts: [{ t: "Abrir só a portinhola e examinar", h: -1, p: -1, volta: true, fx: () => exameNoturno(f) },
+        { t: "Deixar entrar", h: 6, p: -6, fx: () => { admit(f, true); return `${f.nome} entra encharcad${ela(f)} e tremendo. Dorme no chão do refeitório.`; } },
+        { t: "Deixar do lado de fora", h: -6, p: 3, fx: () => "Os gritos param antes do amanhecer." }] }; } },
 ];
 
 // ---------- Infectado escondido ----------
@@ -2414,7 +2469,7 @@ function loop(nowMs) {
   setTimeout(fim, 3500);
   if (location.hash === "#debug") fim();
 })();
-if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave };
+if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais };
 renderTools(); renderFicha(); renderHUD();
 startGame(true);
 requestAnimationFrame(loop);
