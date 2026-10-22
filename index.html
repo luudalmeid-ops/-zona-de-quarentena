@@ -399,6 +399,7 @@ body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-
 #julg .scene { flex: 0 1 auto; min-height: 0; background: #1c1511; }
 #julg .scene canvas { width: 100%; height: auto; max-height: 100%; aspect-ratio: 128 / 72; }
 #jdlg { flex: 1 1 auto; justify-content: flex-start; }
+#julg .scene.panico { animation: flinch .16s infinite; }
 #fac { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; flex: none; }
 .fhs { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; }
 .fh.up { color: var(--safe); } .fh.dn { color: #f0a090; }
@@ -534,6 +535,7 @@ const SIGN_TXT = {
   pescoco: () => "veias escuras no pescoço",
 };
 const SCAN_T = 0.9;
+const AGIT_SEG = 15; // segundos até a agitação chegar ao limite, igual em todos os dias
 
 // ---------- Pessoas ----------
 const NOMES_F = ["Ana", "Bruna", "Carla", "Dandara", "Elisa", "Fernanda", "Graça", "Helena", "Iara", "Joana", "Kátia", "Luana", "Marta", "Neide", "Olívia", "Priscila", "Rita", "Sônia", "Tereza", "Vitória"];
@@ -1403,7 +1405,6 @@ function useTool(id) {
 function finishScan() {
   const id = S.scan.id; S.scan = null; S.phase = "play";
   S.checked[id] = true; S.view = id; S.viewAt = performance.now() / 1000;
-  S.agit = Math.min(.99, S.agit + .07);
   flinch(pick(REACAO[id][S.cur.infected && chance(.6) ? 1 : 0]));
   beep(1320, .06, "sine", .06);
   renderTools(); renderFicha();
@@ -2020,13 +2021,47 @@ function exameNoturno(m) {
   return `Termômetro: ${fmtT(temp)}. Lanterna: ${olho}.`;
 }
 function executar(m) {
-  gunshot(); flashShake(); splatter(true);
+  const N = S.night;
   tirarMorador(m); S.execs++;
   S.mortosBase.push({ nome: m.nome, causa: "execução", dia: S.day });
-  if (S.night && S.night.c) S.night.c.alvo = null;
   if (m.infected) fac(0, 4, "Execução");
   else { S.culpa.push(m.nome); S.execInocentes++; }
-  return `Um tiro. ${m.nome} cai ao lado da fogueira. Ninguém fala mais nada esta noite.`;
+  N.exec = { m, t0: performance.now() / 1000, tiro: 0, x0: 104 };
+  if (N.c) N.c.alvo = null;
+  musDuck(8);
+  [0, .55, 1.1, 1.65, 2.2].forEach(d => sfx(55, .25, "sine", .35, { to: 38, delay: d }));
+  const quem = () => pick(N.crowd) || null;
+  // As reações não revelam se a pessoa estava infectada.
+  return [
+    [null, `Os vigias arrastam ${m.nome} até o meio do refeitório, na frente de todos.`, "Refeitório"],
+    [m, pick(["Não! Por favor! Eu não estou doente!", "Eu tenho família aqui! Olha pra mim!", "Vocês me conhecem! Vocês me conhecem!", "Me examina de novo! Por favor!"])],
+    [null, "Um tiro.", "Refeitório", "tiro"],
+    [null, `${m.nome} cai ao lado da fogueira. O refeitório explode em gritos.`, "Refeitório"],
+    [quem(), pick(["Você matou na frente das crianças!", "Assassino! Assassino!", "Era gripe! Podia ser só gripe!"])],
+    [quem(), pick(["Fez o que tinha que ser feito.", "Pelo menos agora a gente dorme.", "Quem é o próximo? Quem é o próximo?!"])],
+    [null, "As mães cobrem os olhos das crianças. Alguém vomita no canto. Ninguém volta a sentar.", "Refeitório"],
+  ];
+}
+function dispararExecucao() {
+  const N = S.night; if (!N.exec || N.exec.tiro) return;
+  N.exec.tiro = performance.now() / 1000;
+  gunshot(); flashShake(); splatter(true);
+  const sc = $("#julg .scene"); sc.classList.add("panico"); setTimeout(() => sc.classList.remove("panico"), 1800);
+  setTimeout(() => {
+    [0, .12, .3, .55, .8].forEach((d, i) => sfx(480 + i * 110, 1, "sawtooth", .045, { to: 760 + i * 140, delay: d, atk: .05, rel: .5, cut: 2600 }));
+    noise(3, 1300, .6, .4);
+  }, 220);
+  setTimeout(() => { sfx(880, 1.8, "triangle", .03, { to: 660, atk: .1, rel: .9 }); sfx(940, 1.4, "triangle", .025, { to: 720, delay: .9, atk: .1, rel: .7 }); }, 1000);
+}
+// Corpo caído de lado, com a poça de sangue crescendo.
+function corpo(K, p, x, y, T) {
+  const poca = Math.min(1, T / 2.5);
+  for (let j = 0; j < 5; j++) { const w = Math.round((14 + j * 4) * poca); K(x + 10 - w / 2, y + 6 + j, w, 1, j < 2 ? "#7e0d0d" : "#5e0707"); }
+  K(x - 24, y + 2, 14, 5, shade(p.roupa, -.55)); K(x - 26, y + 3, 3, 4, "#111");
+  K(x - 10, y, 18, 8, p.roupa); K(x - 10, y, 18, 1, shade(p.roupa, .2));
+  K(x + 8, y - 1, 9, 9, p.pele); K(x + 14, y - 1, 3, 9, p.cabelo);
+  K(x + 10, y + 3, 1, 1, "#111"); K(x + 9, y + 6, 3, 1, "#3a0808");
+  K(x + 2, y + 2, 4, 3, "#8e1010");
 }
 
 // ---------- Julgamento: a noite ----------
@@ -2068,7 +2103,7 @@ function proximoCaso() {
   if (!c) return fimDaNoite();
   // um caso pode ficar sem sentido se alguém morreu antes dele (ex.: transformação)
   if ((c.quem && !S.moradores.includes(c.quem)) || (c.alvo && !S.moradores.includes(c.alvo))) return proximoCaso();
-  N.c = c; N.lines = c.falas; N.li = 0; N.shown = 0; N.mode = "fala"; N.wait = 0;
+  N.c = c; N.lines = c.falas; N.li = 0; N.shown = 0; N.mode = "fala"; N.wait = 0; N.exec = null;
   const ruins = new Set([c.quem, c.alvo]);
   N.crowd = shuffle(S.moradores.filter(m => !ruins.has(m) && !m.isolado)).slice(0, 6);
   $("#jTag").textContent = `Refeitório · Noite do dia ${S.day} · ${c.titulo}`;
@@ -2080,7 +2115,11 @@ function jTap() {
   const N = S.night; if (S.phase !== "julg" || !N || !N.lines) return;
   const L = jLinha();
   if (N.shown < L.length) { N.shown = L.length; return renderJulg(); }
-  if (N.li < N.lines.length - 1) { N.li++; N.shown = 0; N.wait = 0; beep(300, .03, "square", .02); return renderJulg(); }
+  if (N.li < N.lines.length - 1) {
+    N.li++; N.shown = 0; N.wait = 0; beep(300, .03, "square", .02);
+    if (N.lines[N.li][3] === "tiro") dispararExecucao();
+    return renderJulg();
+  }
   if (N.mode === "fala") { N.mode = N.c.opts.length ? "menu" : "fim"; return renderJulg(); }
 }
 function renderJulg() {
@@ -2088,7 +2127,8 @@ function renderJulg() {
   $("#jWho").textContent = l[0] ? `${l[0].nome} · ${l[0].idade} anos · ${l[0].oficio}` : (l[2] || "Refeitório");
   $("#jTxt").textContent = l[1].slice(0, Math.floor(N.shown));
   $("#jHint").style.visibility = N.mode === "fala" ? "visible" : "hidden";
-  const ch = $("#jOpts"), key = N.ci + N.mode + N.c.opts.length;
+  const ultima = N.li >= N.lines.length - 1;
+  const ch = $("#jOpts"), key = N.ci + N.mode + N.c.opts.length + ultima;
   if (ch.dataset.key === key) return;
   ch.dataset.key = key; ch.innerHTML = "";
   if (N.mode === "menu") N.c.opts.forEach(o => {
@@ -2096,7 +2136,7 @@ function renderJulg() {
     b.innerHTML = `${o.t}<span class="fhs">${facHint(o.h || 0, o.p || 0)}</span>`;
     b.onclick = () => escolher(o); ch.append(b);
   });
-  if (N.mode === "resultado" || N.mode === "fim") {
+  if ((N.mode === "resultado" || N.mode === "fim") && ultima) {
     const b = document.createElement("button"); b.type = "button"; b.className = "opt go"; b.textContent = "Continuar";
     b.onclick = () => { if (N.volta) { N.volta = false; N.mode = "menu"; renderJulg(); } else proximoCaso(); };
     ch.append(b);
@@ -2110,7 +2150,7 @@ function escolher(o) {
   recount(); renderBase(); renderFac();
   beep(o.h > 0 ? 520 : 330, .08, "triangle", .05);
   if (o.volta) { N.c.opts = N.c.opts.filter(x => x !== o); N.volta = true; }
-  N.lines = [[null, r, "Resultado"]]; N.li = 0; N.shown = 0; N.mode = "resultado";
+  N.lines = Array.isArray(r) ? r : [[null, r, "Resultado"]]; N.li = 0; N.shown = 0; N.mode = "resultado";
   $("#jOpts").dataset.key = "";
   renderJulg();
 }
@@ -2157,7 +2197,13 @@ function drawJulg(K, t) {
   K(96, 8, 18, 12, "#0c1222"); K(101, 8, 1, 12, "#3a3f38"); K(108, 8, 1, 12, "#3a3f38");
   for (let i = 0; i < 6; i++) K(97 + (i * 5) % 16, 8 + ((i * 7 + Math.floor(t * 30)) % 11), 1, 2, "rgba(150,170,210,.5)");
   const N = S.night, c = N && N.c;
-  if (N && N.crowd) N.crowd.forEach((m, i) => person(K, m, [10, 24, 40, 88, 104, 118][i], 60, t + i, false, 1));
+  const ex = N && N.exec, tTiro = ex && ex.tiro ? t - ex.tiro : -1;
+  if (N && N.crowd) N.crowd.forEach((m, i) => {
+    let x = [10, 24, 40, 88, 104, 118][i];
+    if (tTiro >= 0) x += (i < 3 ? -1 : 1) * Math.min(26, tTiro * (14 + i * 5)) + (tTiro < 2 ? Math.round(Math.sin(t * 40 + i) * 1.5) : 0);
+    else if (ex) x += Math.round(Math.sin(t * 25 + i));
+    person(K, m, x, 60, t + i, tTiro >= 0 && tTiro < 2, 1);
+  });
   for (let y = 30; y < 72; y++) { const r = (y - 30) * 1.1; K(Math.round(64 - r), y, Math.round(r * 2), 1, `rgba(232,140,60,${.035 + .01 * Math.sin(t * 9)})`); }
   K(0, 57, 128, 15, "#3b2a1c"); K(0, 57, 128, 2, "#5a4030");
   const f = Math.sin(t * 13) > 0;
@@ -2165,6 +2211,15 @@ function drawJulg(K, t) {
   K(60, 43, 8, 7, f ? "#e8762a" : "#f0a030"); K(62, 39, 4, 5, f ? "#f0c040" : "#e8762a"); K(63, 36, 2, 3, "#ffd970");
   if (c && c.quem && S.moradores.includes(c.quem)) person(K, c.quem, 24, 94, t, false, 2);
   if (c && c.alvo && S.moradores.includes(c.alvo)) person(K, c.alvo, 104, 94, t + .5, false, 2);
+  if (ex && !ex.tiro) {
+    const k = Math.min(1, (t - ex.t0) / 1.5), luta = Math.round(Math.sin(t * 22) * 2);
+    person(K, ex.m, Math.round(ex.x0 - k * 22) + luta, 94, t, true, 2);
+  }
+  if (ex && ex.tiro) {
+    if (tTiro < .12) K(0, 0, 128, 72, "rgba(255,250,220,.75)");
+    if (tTiro < .6) person(K, ex.m, 82, 94 + Math.round(tTiro * 40), t, false, 2);
+    else corpo(K, ex.m, 78, 60, tTiro);
+  }
   K(0, 0, 128, 72, `rgba(255,140,40,${.04 + .02 * Math.sin(t * 9)})`);
 }
 const TUT_JULG = [
@@ -2221,7 +2276,7 @@ const TUT_DIA1 = [
   { el: "#choices", txt: "Você pode fazer perguntas. Quando quiser, toque em <b>Levar para a triagem</b>.", wait: "triagem" },
   { el: "#base", txt: "Esta é a <b>base</b>: 20 moradores. Cada um come <b>1 ração por dia</b> (criança, meia). Quem você salva com profissão repõe um recurso: ferreiro o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Quem não tem profissão só come.</b> Muro em zero ou menos de 5 moradores, e a base cai." },
   { el: "#pRole", txt: "Aqui aparece a <b>profissão</b> da pessoa e o que ela faria pela base. Matar quem tem profissão também custa caro." },
-  { el: ".agit", txt: "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Hoje ela sobe devagar. Está pausada enquanto você lê." },
+  { el: ".agit", txt: "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Ela leva 15 segundos para encher. Está pausada enquanto você lê." },
   { el: '.tool[data-id="temp"]', txt: "Comece pelo <b>termômetro</b>. Toque nele.", wait: "tool:temp" },
   { el: ".exam-view", txt: "<b>38,0 °C ou mais é febre</b>, sinal de infecção. Até 37,9 °C pode passar." },
   { el: '.tool[data-id="olhos"]', txt: "Agora a <b>lanterna</b>. Toque nela.", wait: "tool:olhos" },
@@ -2279,7 +2334,7 @@ function loop(nowMs) {
   if ((S.phase === "play" || S.phase === "scan") && S.cur) {
     const p = S.cur, prev = S.agit;
     // Saudáveis e infectados se agitam no mesmo ritmo (com variação por pessoa): esperar não revela nada, só aumenta o risco.
-    p.agitRate = p.agitRate || R(.8, 1.2) / (S.day === 1 ? 45 : Math.max(9, 17 - S.day));
+    p.agitRate = 1 / AGIT_SEG;
     if (!S.tut) S.agit = Math.min(1, S.agit + dt * p.agitRate);
     if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
     if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : pick(["Por favor! Eu tenho família!", "Eu não aguento mais esperar!", "(começa a hiperventilar)"]));
@@ -2303,7 +2358,7 @@ function loop(nowMs) {
     if (N.shown < L.length) {
       const b = Math.floor(N.shown); N.shown = Math.min(L.length, N.shown + dt * 50);
       if (Math.floor(N.shown) !== b) renderJulg();
-    } else if (N.mode === "fala") { N.wait += dt; if (N.wait > .7 + L.length / 45) jTap(); }
+    } else if (N.mode === "fala" || (N.mode === "resultado" && N.li < N.lines.length - 1)) { N.wait += dt; if (N.wait > .7 + L.length / 45) jTap(); }
     if (Math.random() < dt * 3) noise(.04, 2500, 2, .05);
   }
   if (S.phase === "julg" || S.phase === "julg-fim") drawJulg(JK, now);
