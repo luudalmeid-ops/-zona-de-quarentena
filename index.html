@@ -2469,7 +2469,7 @@ function loop(nowMs) {
   setTimeout(fim, 3500);
   if (location.hash === "#debug") fim();
 })();
-if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais };
+if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais, casoAcusacao, proximoCaso };
 renderTools(); renderFicha(); renderHUD();
 startGame(true);
 requestAnimationFrame(loop);
