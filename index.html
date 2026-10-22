@@ -2380,7 +2380,9 @@ function tutNovidades() {
 
 // ---------- Loop ----------
 let last = performance.now();
-function loop(nowMs) {
+function loop() {
+  // O tempo vem do relógio, não do número de quadros desenhados.
+  const nowMs = performance.now();
   const now = nowMs / 1000, dt = Math.min(.1, (nowMs - last) / 1000); last = nowMs;
   if ((S.phase === "play" || S.phase === "scan") && !S.tut) {
     S.time -= dt;
