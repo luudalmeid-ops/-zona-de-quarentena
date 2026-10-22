@@ -372,6 +372,28 @@ body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-
 .sp-sub { font-size: 11px; letter-spacing: .4em; margin-right: -.4em; text-transform: uppercase; color: #8a8a80; }
 @keyframes spIn { 0% { opacity: 0; transform: scale(.96); } 25% { opacity: 1; transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sp-in { animation-duration: 2.4s; } }
+/* Base com moradores e registro */
+.base { grid-template-columns: repeat(5, 1fr); }
+.reg-tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+.reg-tools button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px; font-size: 12px; }
+.reg-tools button.on { border-color: var(--accent); color: var(--accent); }
+.reg { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.reg li { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
+.reg canvas { width: 40px; height: 40px; border-radius: 3px; }
+.reg .nm { font-weight: 700; font-size: 14px; }
+.reg .dt { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.reg .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #2c3326; color: var(--muted); margin-right: 4px; }
+.reg .tag.on { background: #3a3220; color: var(--accent); }
+.reg .tag.bad { background: #3a1f1b; color: #f0a090; }
+.reg .x { background: none; border: 1px solid #6a2a22; color: #f0a090; border-radius: 5px; padding: 6px 8px; font-size: 12px; }
+.reg .x:disabled { opacity: .3; }
+.adeus { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: center; }
+.adeus canvas { width: 96px; height: 96px; border-radius: 4px; }
+.adeus q { font-size: 17px; line-height: 1.4; font-style: italic; }
+.impacto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.impacto li::before { content: "› "; color: var(--accent); }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn.ghost { background: var(--panel-2); color: var(--fg); }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
 .cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
 .cine-title span { font-size: 14px; color: var(--muted); }
@@ -507,9 +529,51 @@ const PROFS = [
 const COMUNS = [["professor", "professora"], ["motorista", "motorista"], ["estudante", "estudante"], ["vendedor", "vendedora"], ["costureiro", "costureira"], ["cantor", "cantora"]];
 const BASE = {
   muro:    { nome: "Muro",    func: "Mantém o muro e o portão de pé", queda: d => 15 + d * 3, prod: 7 },
-  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => 11 + Math.floor(S.pop / 2), prod: 6 },
+  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => consumoTotal(), prod: 5 },
   saude:   { nome: "Saúde",   func: "Cuida dos doentes e feridos",    queda: () => 11, prod: 5 },
   energia: { nome: "Energia", func: "Mantém geradores e refletores",  queda: d => d >= 3 ? 20 : 11, prod: 6 },
+};
+// Moradores: cada um come por dia (criança come metade). Quem não tem função só consome.
+const MIN_MORADORES = 5;
+const consumo = m => m.crianca ? .5 : 1;
+function consumoTotal() { return (S.moradores || []).reduce((a, m) => a + consumo(m), 0); }
+function recount() {
+  S.workers = { muro: 0, comida: 0, saude: 0, energia: 0 };
+  for (const m of S.moradores) if (m.role && S.workers[m.role] !== undefined) S.workers[m.role]++;
+  S.pop = S.moradores.length;
+}
+function makeMorador(role, tipo) {
+  const p = makePerson(1);
+  Object.assign(p, { infected: false, signs: [], temp: R(36.1, 37.2), olhos: "normal", bracos: "limpo", pulso: RI(64, 90), pescoco: "limpo",
+    dias: RI(3, 40), estado: "saudável" });
+  if (tipo === "crianca") {
+    Object.assign(p, { crianca: true, idade: RI(5, 13), oficio: "criança", role: null, barba: false, oculos: false });
+    p.cabelo = pick(CABELOS);
+  } else if (tipo === "idoso") {
+    Object.assign(p, { idade: RI(66, 82), oficio: p.fem ? "aposentada" : "aposentado", role: null, cabelo: "#b9b6ae" });
+  } else if (role) {
+    const r = pick(PROFS.filter(x => x[2] === role));
+    Object.assign(p, { oficio: r[p.fem ? 1 : 0], role, idade: RI(22, 58) });
+  } else {
+    const c = pick(COMUNS); Object.assign(p, { oficio: c[p.fem ? 1 : 0], role: null, idade: RI(18, 60) });
+  }
+  return p;
+}
+function moradoresIniciais() {
+  const a = [];
+  ["muro", "muro", "comida", "comida", "saude", "saude", "energia", "energia"].forEach(r => a.push(makeMorador(r)));
+  for (let i = 0; i < 6; i++) a.push(makeMorador(null));
+  for (let i = 0; i < 3; i++) a.push(makeMorador(null, "crianca"));
+  for (let i = 0; i < 3; i++) a.push(makeMorador(null, "idoso"));
+  const usados = new Set();
+  a.forEach(m => { while (usados.has(m.nome)) m.nome = `${pick(m.fem ? NOMES_F : NOMES_M)} ${pick(SOBRENOMES)}`; usados.add(m.nome); });
+  return a;
+}
+const ADEUS = {
+  crianca: ["Moço... pra onde eu vou?", "Eu prometo que como pouquinho!", "Minha mãe falou que aqui era seguro."],
+  idoso: ["Eu não vou durar uma noite lá fora. Você sabe disso.", "Construí metade desse muro com essas mãos.", "Tudo bem. Eu entendo. Cuida deles."],
+  role: ["Você vai precisar de mim. Vai ver.", "Eu trabalhei todo dia aqui! Isso não conta?", "Quem vai fazer o meu serviço amanhã?"],
+  comum: ["Você me salvou no portão... pra isso?", "Eu posso aprender qualquer coisa, me dá uma chance!", "Eu tenho gente aqui dentro. Por favor.", "Então é assim que decide quem vive?"],
 };
 const ORIGENS = ["Setor Norte", "Vila Industrial", "Bairro do Porto", "Rodovia 116", "Centro antigo", "Zona rural", "Hospital Regional", "Estação de trem"];
 const FALAS = [
@@ -570,8 +634,8 @@ function disc(px, cx, cy, r, c, inside) {
       if ((x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 <= r * r && (!inside || inside(x, y))) px(x, y, 1, 1, c);
 }
 
-const cv = $("#cv"), cx = cv.getContext("2d"), P = painter(cx);
-function drawPortrait(p, t) {
+const cv = $("#cv"), cx = cv.getContext("2d"), Pcv = painter(cx);
+function drawPortrait(p, t, P = Pcv) {
   P(0, 0, 48, 48, "#2b3127");
   for (let y = 4; y < 48; y += 6) P(0, y, 48, 1, "#343b2f");
   for (let y = 4; y < 48; y += 12) P(0, y, 4, 1, "#596349");
@@ -624,7 +688,7 @@ function drawPortrait(p, t) {
   if (p.barba) { const b = shade(hair, -.1); P(16, 26 + o, 16, 5, b); P(18, 31 + o, 12, 1, b); P(21, 27 + o, 6, 1, shade(sk, -.35)); }
   else P(21, 27 + o, 6, 1, shade(sk, -.35));
   if (p.idade > 55) { P(17, 23 + o, 2, 1, skD); P(29, 23 + o, 2, 1, skD); }
-  if (p === S.cur && S.phase === "lunge") {
+  if (P === Pcv && p === S.cur && S.phase === "lunge") {
     P(18, 20 + o, 4, 2, "#e8d040"); P(26, 20 + o, 4, 2, "#e8d040"); P(20, 20 + o, 1, 2, "#300"); P(28, 20 + o, 1, 2, "#300");
     P(17, 18 + o, 5, 1, "#2a1010"); P(26, 18 + o, 5, 1, "#2a1010");
     P(20, 26 + o, 8, 4, "#3a0808"); P(21, 26 + o, 1, 1, "#e9e5d3"); P(26, 26 + o, 1, 1, "#e9e5d3");
@@ -727,6 +791,12 @@ function drawExam(p, view, t, since) {
 }
 function RIr(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
 
+function miniRetrato(p, size = 48) {
+  const c = document.createElement("canvas"); c.width = c.height = 48;
+  drawPortrait(Object.assign({}, p, { shot: false, fall: 0 }), 0, painter(c.getContext("2d")));
+  c.style.width = c.style.height = size + "px";
+  return c;
+}
 function toolIcon(id) {
   const c = document.createElement("canvas"); c.width = c.height = 14;
   const k = painter(c.getContext("2d")), g = "#e9e5d3", a = "#e3a83b";
@@ -935,7 +1005,7 @@ const CINE = [
       for (let i = 0; i < 70; i++) { const x = 64 + Math.sin(a) * i * 1.4, y = 8 + Math.cos(a) * i * .9; K(Math.round(x), Math.round(y), 2 + Math.floor(i / 12), 1, "rgba(255,230,150,.12)"); }
       K(62, 6, 4, 3, "#ffe38c");
     } },
-  { txt: "A Zona 7 abriga 4.000 pessoas. Lá fora, milhares querem entrar. Alguns estão doentes e não sabem. Outros sabem e mentem.",
+  { txt: "A Zona 7 é um posto pequeno: vinte pessoas atrás de um muro de contêineres. Lá fora, milhares querem entrar. Alguns estão doentes e não sabem. Outros sabem e mentem.",
     draw: (K, t) => {
       sky(K, "#0b0f1a", "#0e1420");
       for (let y = 44; y < 72; y++) K(0, y, 128, 1, "#171a15");
@@ -1205,15 +1275,15 @@ const S = { day: 1, score: 0, best: 0, strikes: 0, queue: [], idx: 0, cur: null,
 try { S.best = +localStorage.getItem("zq-best") || 0; } catch (e) {}
 
 function dayConfig(d) {
-  const n = Math.min(5 + d, 14);
-  return { n, time: Math.max(n * 8, n * 13 - (d - 1) * 6) };
+  const n = Math.min(3 + Math.ceil(d / 2), 6);
+  return { n, time: Math.max(n * 10, n * 15 - (d - 1) * 4) };
 }
 
 function startGame() {
   S.tutDone = S.tutDone || {}; tutEnd();
   Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
-    base: { muro: 55, comida: 45, saude: 45, energia: 50 }, bat: 3, batCharge: 0, workers: { muro: 1, comida: 1, saude: 1, energia: 1 } });
-  renderBase();
+    base: { muro: 55, comida: 45, saude: 45, energia: 50 }, bat: 3, batCharge: 0, moradores: moradoresIniciais(), mortosBase: [], expulsos: [] });
+  recount(); renderBase();
   if (S.seenCine) dayIntro();
   else { S.queue = []; S.idx = 0; S.cur = null; renderHUD(); playCine(dayIntro); }
 }
@@ -1244,7 +1314,7 @@ function dayIntro() {
     : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`;
   openOv(`<span class="eyebrow">Dia ${S.day} · ${cfg.n} na fila · turno de ${fmtTime(cfg.time)}</span>
     <h2>${S.day === 1 ? "Primeiro turno" : "Dia " + S.day}</h2>${intro}${alerta}
-    ${S.day === 1 ? `<p>A zona depende de quem você deixa entrar. Ferreiros mantêm o muro, agricultores a comida, médicos a saúde, eletricistas a energia. Se o <b>muro</b> chegar a zero, a horda entra.</p>` : ""}
+    ${S.day === 1 ? `<p>A Zona 7 tem <b>20 moradores</b>, e cada um come uma ração por dia. Quem tem profissão sustenta a base; quem não tem só consome. Se o <b>muro</b> cair ou sobrarem <b>menos de 5 moradores</b>, acabou.</p>` : ""}
     ${rulesHTML()}
     <button class="btn main" id="go" type="button">Abrir o portão</button>`);
   $("#go").onclick = () => { closeOv(); S.phase = "play"; beep(440, .1); beep(660, .12); nextPerson(); };
@@ -1348,15 +1418,17 @@ function verdict(save, p, reflex) {
     if (save) admit(p);
     if (save) { beep(660, .09); beep(990, .12, "square", .04); }
     if (reflex) S.score += 50;
-    toast(save ? (p.role ? `${p.nome} vai reforçar ${BASE[p.role].nome.toLowerCase()}. +${100 + bonus}` : `Liberado. +${100 + bonus}`) : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
+    toast(save ? (p.role ? `${p.nome} vai reforçar ${BASE[p.role].nome.toLowerCase()}. +${100 + bonus}` : `Liberado. Mais uma boca: comida −1 por dia. +${100 + bonus}`) : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
   }
   renderHUD();
   setTimeout(() => { S.idx++; nextPerson(); }, save ? 1000 : 1400);
 }
 function artigo(p) { return p.fem ? "uma" : "um"; }
 function admit(p) {
-  S.pop++;
-  if (p.role) { S.workers[p.role]++; renderBase(); flashBase(p.role, "pulse"); }
+  S.moradores.push(Object.assign(p, { dias: 0, estado: "saudável" }));
+  recount(); renderBase();
+  flashBase(p.role || "moradores", "pulse");
+  if (!p.role) flashBase("comida", "hurt");
 }
 function hurtBase(role) { flashBase(role, "hurt"); }
 function flashBase(role, cls) {
@@ -1364,42 +1436,69 @@ function flashBase(role, cls) {
   el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
 }
 function renderBase() {
-  const box = $("#base"); if (!S.base) return;
-  box.innerHTML = Object.keys(BASE).map(k => {
+  const box = $("#base"); if (!S.base || !S.moradores) return;
+  const cls = v => v < 25 ? "low" : v < 50 ? "mid" : "";
+  const n = S.moradores.length, c = consumoTotal(), dias = c ? S.base.comida / c : 99;
+  let html = `<div class="base-item" data-r="moradores" title="Moradores da base. Menos de ${MIN_MORADORES}, a base colapsa."><div class="base-top">Pessoas<b>${n}</b></div>
+    <div class="meter"><i class="${n < 8 ? "low" : n < 12 ? "mid" : ""}" style="width:${Math.min(100, n / 20 * 100)}%"></i></div>
+    <div class="base-sub">mínimo ${MIN_MORADORES}</div></div>`;
+  html += Object.keys(BASE).map(k => {
+    if (k === "comida") {
+      const v = Math.max(0, Math.floor(S.base.comida));
+      return `<div class="base-item" data-r="comida" title="Rações em estoque"><div class="base-top">Comida<b>${v}</b></div>
+        <div class="meter"><i class="${dias < 2 ? "low" : dias < 4 ? "mid" : ""}" style="width:${Math.min(100, dias / 6 * 100)}%"></i></div>
+        <div class="base-sub">≈${dias >= 10 ? "10+" : Math.floor(dias)} dias</div></div>`;
+    }
     const v = Math.max(0, Math.round(S.base[k]));
     return `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
-      <div class="meter"><i class="${v < 25 ? "low" : v < 50 ? "mid" : ""}" style="width:${v}%"></i></div>
+      <div class="meter"><i class="${cls(v)}" style="width:${v}%"></i></div>
       <div class="base-sub">${S.workers[k]} ${S.workers[k] === 1 ? "pessoa" : "pessoas"}</div></div>`;
   }).join("");
+  box.innerHTML = html;
 }
 // Fecha o dia: produção dos trabalhadores menos o desgaste. Recursos zerados têm consequência.
 function runBase() {
-  const rows = [], eventos = [];
+  const rows = [], eventos = [], mortes = [];
   for (const k in BASE) {
     const antes = S.base[k], q = BASE[k].queda(S.day), p = S.workers[k] * BASE[k].prod;
-    S.base[k] = Math.max(0, Math.min(100, antes + p - q));
+    S.base[k] = k === "comida" ? antes + p - q : Math.max(0, Math.min(100, antes + p - q));
     rows.push({ k, antes, depois: S.base[k], q, p });
   }
-  const perde = (n, motivo) => {
-    for (let i = 0; i < n; i++) {
-      const vivos = Object.keys(S.workers).filter(k => S.workers[k] > 0);
-      if (!vivos.length) break;
-      const k = pick(vivos); S.workers[k]--;
-      eventos.push(`${motivo}: a base perdeu um trabalhador de ${BASE[k].nome.toLowerCase()}.`);
+  // Morre primeiro quem é mais frágil: idosos, crianças e quem já está fraco.
+  const fragilidade = m => (m.idade > 64 ? 3 : 0) + (m.crianca ? 2 : 0) + (m.estado !== "saudável" ? 2 : 0) + Math.random() * 2;
+  const morrer = (n, causa) => {
+    for (let i = 0; i < n && S.moradores.length; i++) {
+      const alvo = S.moradores.slice().sort((a, b) => fragilidade(b) - fragilidade(a))[0];
+      S.moradores.splice(S.moradores.indexOf(alvo), 1);
+      S.mortosBase.push({ nome: alvo.nome, causa, dia: S.day });
+      mortes.push(`<b>${alvo.nome}</b> (${alvo.idade} anos, ${alvo.oficio}) morreu de ${causa}.`);
     }
   };
-  if (S.base.comida <= 0) { perde(2, "Fome"); S.pop = Math.max(0, S.pop - 3); S.base.saude = Math.max(0, S.base.saude - 15); eventos.push("Sem comida, três moradores foram embora e a saúde da zona piorou."); }
-  if (S.base.saude <= 0) perde(1, "Uma doença se espalhou");
+  if (S.base.comida < 0) {
+    const falta = -S.base.comida;
+    S.base.comida = 0;
+    morrer(Math.min(3, Math.ceil(falta / 4)), "fome");
+    S.moradores.forEach(m => { if (chance(.4)) m.estado = "fraco de fome"; });
+    S.base.saude = Math.max(0, S.base.saude - 10);
+    eventos.push(`Faltaram ${Math.ceil(falta)} rações. A fome atingiu a base e a saúde caiu.`);
+  }
+  if (S.base.saude < 15) morrer(2, "uma infecção comum, sem remédio");
+  else if (S.base.saude < 30) morrer(1, "uma doença que ninguém conseguiu tratar");
+  S.moradores.forEach(m => m.dias++);
+  recount();
   S.blackout = S.base.energia <= 0;
   if (S.blackout) eventos.push("Sem energia: os refletores apagaram. Amanhã não dá para examinar braços nem pescoço, e a lanterna não recarrega.");
-  for (const r of rows) if (r.depois > 0 && r.depois < 25) eventos.push(`${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", comida: "agricultor ou cozinheiro", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`);
+  for (const r of rows) if (r.k !== "comida" && r.depois > 0 && r.depois < 25) eventos.push(`${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`);
+  const c = consumoTotal();
+  if (S.base.comida < c * 2) eventos.push(`Comida para menos de 2 dias (${Math.floor(S.base.comida)} rações para ${S.moradores.length} moradores). Precisa de agricultor ou cozinheiro, ou de menos bocas.`);
   renderBase();
   const html = `<div class="report">${rows.map(r => {
     const d = Math.round(r.depois - r.antes);
-    return `<div class="r"><span>${BASE[r.k].nome}<small>${S.workers[r.k]} trab. produzem +${r.p} · desgaste −${r.q}</small></span>
-      <span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d > 0 ? "+" : ""}${d}</span><b>${Math.round(r.depois)}</b></div>`;
-  }).join("")}</div>${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
-  return { html, muroCaiu: S.base.muro <= 0 };
+    const det = r.k === "comida" ? `${S.workers.comida} trab. produzem +${r.p} · consumo −${Math.round(r.q * 10) / 10}` : `${S.workers[r.k]} trab. produzem +${r.p} · desgaste −${r.q}`;
+    return `<div class="r"><span>${BASE[r.k].nome}<small>${det}</small></span>
+      <span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d > 0 ? "+" : ""}${d}</span><b>${Math.max(0, Math.round(r.depois))}</b></div>`;
+  }).join("")}</div>${mortes.map(e => `<div class="evento">${e}</div>`).join("")}${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
+  return { html, muroCaiu: S.base.muro <= 0, colapso: S.moradores.length < MIN_MORADORES };
 }
 function zombieGroan() {
   [0, .35, .8].forEach((d, i) => sfx(78 - i * 9, 1.3, "sawtooth", .13, { delay: d, to: 52 - i * 6, atk: .15, rel: .6, cut: 420 }));
@@ -1499,7 +1598,7 @@ function distractorTxt(p) {
   return f ? f.charAt(0).toUpperCase() + f.slice(1) + "." : "Nenhum exame mostrava sinal.";
 }
 function endDay(timeout) {
-  S.phase = "over-day"; S.scan = null;
+  S.phase = "over-day"; S.scan = null; tutEnd();
   const left = S.queue.length - S.idx;
   const bonus = timeout ? 0 : Math.floor(S.time) * 2;
   S.score += bonus; saveBest(); renderHUD();
@@ -1515,15 +1614,104 @@ function endDay(timeout) {
       <div><b>${S.strikes}/3</b><span>Erros no total</span></div>
     </div>
     ${S.dia.mortos ? `<div class="evento">${S.dia.mortos} ${S.dia.mortos === 1 ? "pessoa morreu" : "pessoas morreram"} no portão depois de entrar em pânico.</div>` : ""}
-    <span class="eyebrow">Relatório da base · ${S.pop} acolhidos até agora</span>
+    <span class="eyebrow">Relatório da base · ${S.moradores.length} moradores</span>
     ${rep.html}
     <p>Pontuação: <b>${S.score}</b></p>
-    <button class="btn main" id="go" type="button">${rep.muroCaiu ? "Ver o que aconteceu" : "Começar dia " + (S.day + 1)}</button>`);
-  $("#go").onclick = rep.muroCaiu ? () => gameOver("muro") : () => { S.day++; dayIntro(); };
+    ${rep.muroCaiu || rep.colapso ? `<button class="btn main" id="go" type="button">Ver o que aconteceu</button>` :
+      `<button class="btn ghost" id="reg" type="button">Registro de moradores (${S.moradores.length})</button>
+       <button class="btn main" id="go" type="button">Começar dia ${S.day + 1}</button>`}`);
+  if (rep.muroCaiu || rep.colapso) { $("#go").onclick = () => gameOver(rep.muroCaiu ? "muro" : "colapso"); return; }
+  $("#reg").onclick = () => abrirRegistro(() => endDayResumo());
+  $("#go").onclick = proximoDia;
+  S.resumo = $("#ovCard").innerHTML;
+}
+function endDayResumo() {
+  // Volta ao relatório do dia (o registro pode ter mudado a contagem).
+  openOv(`<span class="eyebrow">Fim do turno · Dia ${S.day}</span>
+    <h2>${S.moradores.length} moradores na Zona 7</h2>
+    <p>Comida: <b>${Math.floor(S.base.comida)}</b> rações para um consumo de ${consumoTotal()} por dia.</p>
+    <button class="btn ghost" id="reg" type="button">Registro de moradores (${S.moradores.length})</button>
+    <button class="btn main" id="go" type="button">Começar dia ${S.day + 1}</button>`);
+  $("#reg").onclick = () => abrirRegistro(endDayResumo);
+  $("#go").onclick = proximoDia;
+}
+function proximoDia() {
+  if (S.moradores.length < MIN_MORADORES) return gameOver("colapso");
+  S.day++; dayIntro();
+}
+
+// ---------- Registro de moradores ----------
+const ORDENS = { funcao: "Função", idade: "Idade", estado: "Estado" };
+function abrirRegistro(voltar, ordem = "funcao") {
+  const ms = S.moradores.slice();
+  const peso = m => m.role ? Object.keys(BASE).indexOf(m.role) : 9;
+  if (ordem === "funcao") ms.sort((a, b) => peso(a) - peso(b) || b.idade - a.idade);
+  if (ordem === "idade") ms.sort((a, b) => b.idade - a.idade);
+  if (ordem === "estado") ms.sort((a, b) => (a.estado === "saudável") - (b.estado === "saudável"));
+  const podeExpulsar = S.moradores.length > MIN_MORADORES;
+  openOv(`<span class="eyebrow">Registro de moradores · Zona 7</span>
+    <h2>${S.moradores.length} moradores · ${Math.floor(S.base.comida)} rações</h2>
+    <p class="dt" style="font-size:13px;color:var(--muted)">Consumo de ${consumoTotal()} rações por dia. Expulsar alguém tira uma boca, mas a pessoa vai para a estrada.${podeExpulsar ? "" : ` Com ${MIN_MORADORES} moradores, ninguém mais pode sair.`}</p>
+    <div class="reg-tools">Ordenar: ${Object.entries(ORDENS).map(([k, v]) => `<button type="button" data-o="${k}" class="${k === ordem ? "on" : ""}">${v}</button>`).join("")}</div>
+    <ul class="reg" id="regLista"></ul>
+    <button class="btn main" id="go" type="button">Voltar</button>`);
+  const ul = $("#regLista");
+  ms.forEach(m => {
+    const li = document.createElement("li");
+    li.append(miniRetrato(m, 40));
+    const info = document.createElement("div");
+    const funcao = m.role ? `<span class="tag on">${BASE[m.role].nome}</span>` : `<span class="tag">sem função</span>`;
+    const est = m.estado === "saudável" ? "" : `<span class="tag bad">${m.estado}</span>`;
+    info.innerHTML = `<div class="nm">${m.nome}</div><div class="dt">${m.idade} anos · ${m.oficio} · ${m.dias} ${m.dias === 1 ? "dia" : "dias"} na base</div><div>${funcao}${est}</div>`;
+    li.append(info);
+    const b = document.createElement("button"); b.type = "button"; b.className = "x"; b.textContent = "Expulsar";
+    b.disabled = !podeExpulsar;
+    b.onclick = () => confirmarExpulsao(m, () => abrirRegistro(voltar, ordem));
+    li.append(b);
+    ul.append(li);
+  });
+  document.querySelectorAll(".reg-tools [data-o]").forEach(b => b.onclick = () => abrirRegistro(voltar, b.dataset.o));
+  $("#go").onclick = voltar;
+}
+function confirmarExpulsao(m, voltar) {
+  const mesmos = m.role ? S.workers[m.role] : 0;
+  const impacto = [`Comida: consumo cai ${consumo(m) === 1 ? "1 ração" : "meia ração"} por dia`];
+  if (m.role) impacto.push(mesmos <= 1 ? `<b>A base fica sem ninguém em ${BASE[m.role].nome.toLowerCase()}</b>` : `${BASE[m.role].nome}: de ${mesmos} para ${mesmos - 1} ${mesmos - 1 === 1 ? "pessoa" : "pessoas"} trabalhando`);
+  impacto.push(`Moradores: ${S.moradores.length} → ${S.moradores.length - 1}`);
+  if (m.crianca) impacto.push("Uma criança sozinha na estrada não sobrevive muito tempo");
+  const fala = pick(m.crianca ? ADEUS.crianca : m.idade > 64 && !m.role ? ADEUS.idoso : m.role ? ADEUS.role : ADEUS.comum);
+  openOv(`<span class="eyebrow">Expulsar da Zona 7</span>
+    <div class="adeus"><div id="adeusRet"></div><div><h2>${m.nome}</h2><div class="dt" style="color:var(--muted);font-size:13px">${m.idade} anos · ${m.oficio}</div></div></div>
+    <q>${fala}</q>
+    <ul class="impacto">${impacto.map(i => `<li>${i}</li>`).join("")}</ul>
+    <div class="btn-row"><button class="btn ghost" id="nao" type="button">Voltar</button><button class="btn danger" id="go" type="button">Expulsar</button></div>`);
+  $("#adeusRet").append(miniRetrato(m, 96));
+  $("#nao").onclick = voltar;
+  $("#go").onclick = () => {
+    S.moradores.splice(S.moradores.indexOf(m), 1);
+    S.expulsos.push({ nome: m.nome, dia: S.day });
+    recount(); renderBase();
+    closeOv(); despedida(m, voltar);
+  };
+}
+// Animação: a pessoa sai pelo portão e some na chuva.
+function despedida(m, depois) {
+  S.leave = { p: m, t0: performance.now() / 1000 };
+  $("#atk").hidden = false;
+  musDuck(3); sfx(110, 1.6, "sawtooth", .06, { to: 160, atk: .3, rel: .4, cut: 600 });
+  sfx(330, 1.4, "triangle", .05, { to: 247, delay: .6, atk: .2, rel: .8 });
+  setTimeout(() => { $("#atk").hidden = true; S.leave = null; depois(); }, 3000);
+}
+function drawLeave(T, now) {
+  const walk = Math.max(0, 1 - Math.max(0, T - .4) / 2.2);
+  gateScene(AK, now, S.leave.p, walk, { noHands: true });
+  if (T > 2.4) { akx.globalAlpha = Math.min(1, (T - 2.4) / .5); AK(0, 0, 128, 72, "#040504"); akx.globalAlpha = 1; }
 }
 function gameOver(kind, p) {
-  S.phase = "over"; saveBest(); renderHUD();
-  const txt = kind === "muro"
+  S.phase = "over"; tutEnd(); saveBest(); renderHUD();
+  const txt = kind === "colapso"
+    ? `<h2 class="bad">A base colapsou</h2><p>Com menos de ${MIN_MORADORES} pessoas, ninguém dá conta de vigiar o muro, plantar e cuidar dos doentes ao mesmo tempo. Os últimos moradores abandonaram a Zona 7.</p>`
+    : kind === "muro"
     ? `<h2 class="bad">O muro caiu</h2><p>Sem ninguém para soldar e reforçar, o portão cedeu durante a noite. A horda entrou na Zona 7. Salvar ferreiros e soldadores é o que mantém o muro de pé.</p>`
     : kind === "mordido"
     ? `<h2 class="bad">Você foi mordido</h2><p>${p.nome} avançou antes que você reagisse. Tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. Quanto mais você demora com um infectado, mais agitado ele fica.</p>`
@@ -1531,7 +1719,7 @@ function gameOver(kind, p) {
     ? `<h2 class="bad">A zona foi contaminada</h2><p>Você liberou ${p.nome}, que tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. A infecção se espalhou dentro dos muros.</p>`
     : `<h2 class="bad">Você foi afastado do posto</h2><p>Três sobreviventes saudáveis foram eliminados no seu turno. O comando tirou você do portão.</p>`;
   openOv(`<span class="eyebrow">Fim de jogo · Dia ${S.day}</span>${txt}
-    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div><div><b>${S.day}</b><span>Dias</span></div><div><b>${S.pop}</b><span>Acolhidos</span></div></div>
+    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div><div><b>${S.day}</b><span>Dias</span></div><div><b>${S.moradores.length}</b><span>Moradores</span></div></div>
     <button class="btn main" id="go" type="button">Jogar de novo</button>
     <button class="link" id="rever" type="button">Rever a abertura</button>`);
   $("#go").onclick = startGame;
@@ -1625,7 +1813,7 @@ const TUT = { steps: [], i: 0 };
 const TUT_DIA1 = [
   { el: "#dlg", txt: "Este é o <b>portão</b>. Cada sobrevivente vai tentar te convencer a deixar entrar. A conversa pode dar pistas, mas não prova nada." },
   { el: "#choices", txt: "Você pode fazer perguntas. Quando quiser, toque em <b>Levar para a triagem</b>.", wait: "triagem" },
-  { el: "#base", txt: "Estes são os <b>recursos da base</b>. Todo dia eles se desgastam. Quem você salva repõe: ferreiro mantém o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Muro em zero, a horda entra.</b>" },
+  { el: "#base", txt: "Esta é a <b>base</b>: 20 moradores. Cada um come <b>1 ração por dia</b> (criança, meia). Quem você salva com profissão repõe um recurso: ferreiro o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Quem não tem profissão só come.</b> Muro em zero ou menos de 5 moradores, e a base cai." },
   { el: "#pRole", txt: "Aqui aparece a <b>profissão</b> da pessoa e o que ela faria pela base. Matar quem tem profissão também custa caro." },
   { el: ".agit", txt: "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Hoje ela sobe devagar. Está pausada enquanto você lê." },
   { el: '.tool[data-id="temp"]', txt: "Comece pelo <b>termômetro</b>. Toque nele.", wait: "tool:temp" },
@@ -1641,7 +1829,7 @@ const TUT_NOVO = {
   energia: { el: '.base-item[data-r="energia"]', txt: "O <b>gerador</b> está em colapso. A energia agora cai rápido. Sem energia, você <b>não consegue examinar braços nem pescoço</b>." },
   pescoco: { el: '.tool[data-id="pescoco"]', txt: "Novo exame: <b>pescoço</b>. Veias escuras e arroxeadas subindo pelo pescoço são infecção. Colar e tatuagem são normais. Sem energia, não dá para ver." },
 };
-function tutStart(steps) { if (!steps.length) return; TUT.steps = steps; TUT.i = 0; tutShow(); }
+function tutStart(steps) { if (!steps.length || !["play", "scan", "gate"].includes(S.phase)) return; TUT.steps = steps; TUT.i = 0; tutShow(); }
 function tutEnd() { TUT.steps = []; tutShow(); }
 function tutShow() {
   document.querySelectorAll(".hl").forEach(e => e.classList.remove("hl"));
@@ -1703,6 +1891,7 @@ function loop(nowMs) {
     if (S.scan.t >= st) finishScan();
   } else if (!S.scan) $("#scan").style.width = "0";
   if (S.atk) drawAttack(now - S.atk.t0, now);
+  if (S.leave) drawLeave(now - S.leave.t0, now);
   if (S.cine && S.cine.i < 0) gateScene(C, now, null, 1);
   else if (S.cine) {
     const c = S.cine, L = CINE[c.i].txt;
