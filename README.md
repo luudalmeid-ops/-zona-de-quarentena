@@ -1,6 +1,12 @@
 # Zona de Quarentena
 
-Jogo de triagem em pixel art feito pela **Valtore**. Você é o fiscal do Portão Leste da Zona 7: ouve cada sobrevivente no portão, examina e decide quem salvar e quem eliminar, enquanto mantém o muro, a comida, a saúde e a energia da base.
+Jogo de triagem em pixel art feito pela **Valtore**. Você é o fiscal do Portão Leste da Zona 7 e tem **10 dias** até a cura.
+
+- **De dia, no portão:** ouve cada sobrevivente, examina e decide quem salvar e quem eliminar.
+- **À noite, no refeitório:** os 20 moradores trazem reclamações, pedidos e acusações de infecção (às vezes só medo). Você examina, isola, defende ou executa, e pode expulsar quem pesa na comida.
+- **Facções:** Humanistas querem salvar todos; Pragmáticos, só os úteis. Qualquer uma em zero é motim.
+- **A cura** depende de cientistas e médicos vivos. Vários finais, conforme suas escolhas.
+- O progresso é salvo ao fim de cada noite.
 
 ## Jogar
 
