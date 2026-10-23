@@ -423,6 +423,7 @@ body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-
 .selo-fim b { font-family: var(--f-display); font-size: 14px; text-transform: uppercase; }
 .selo-fim .real { outline: 2px solid var(--accent); }
 .selo-por { font-size: 12px; color: var(--muted); }
+.copy.autor { color: var(--fg); font-size: 12px; margin-bottom: -6px; }
 .copy { display: block; font-size: 11px; color: var(--muted); letter-spacing: .04em; text-align: center; }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
 .cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
@@ -1353,7 +1354,7 @@ function cineAmb(i, dt) {
 let cineCb = null;
 function playCine(cb) {
   cineCb = cb; S.cine = { i: -1, shown: 0 }; S.phase = "cine";
-  $("#ccTxt").innerHTML = (INGLES ? `<div class="cine-title"><h1>Quarantine Zone</h1><span>Use headphones.</span><b>Tap to start</b><div class="lang">${LANG_BTNS()}</div><small class="copy">© 2026 Valtore · All rights reserved</small></div>` : `<div class="cine-title"><h1>Zona de Quarentena</h1><span>Use fone de ouvido.</span><b>Toque para começar</b><div class="lang">${LANG_BTNS()}</div><small class="copy">© 2026 Valtore · Todos os direitos reservados</small></div>`);
+  $("#ccTxt").innerHTML = (INGLES ? `<div class="cine-title"><h1>Quarantine Zone</h1><span>Use headphones.</span><b>Tap to start</b><div class="lang">${LANG_BTNS()}</div><small class="copy autor">Created by @ludianderson_almeida</small><small class="copy">© 2026 Valtore · All rights reserved</small></div>` : `<div class="cine-title"><h1>Zona de Quarentena</h1><span>Use fone de ouvido.</span><b>Toque para começar</b><div class="lang">${LANG_BTNS()}</div><small class="copy autor">Criado por @ludianderson_almeida</small><small class="copy">© 2026 Valtore · Todos os direitos reservados</small></div>`);
   $("#cine").hidden = false;
   $("#ccDots").innerHTML = CINE.map(() => "<i></i>").join("");
   cineDots();
