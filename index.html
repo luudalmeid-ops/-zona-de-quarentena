@@ -1263,19 +1263,38 @@ function musDuck(sec) {
   const n = actx.currentTime; MUS.out.gain.cancelScheduledValues(n);
   MUS.out.gain.setValueAtTime(.06, n); MUS.out.gain.linearRampToValueAtTime(MUS.vol, n + sec);
 }
+// No iPhone o Web Audio obedece à chave de silencioso. A sessão "playback" faz o som tocar mesmo com ela ligada;
+// em iOS antigo (sem navigator.audioSession), um <audio> mudo em loop tem o mesmo efeito.
+let audioMudo = null;
+function sessaoPlayback() {
+  try { if (navigator.audioSession) { navigator.audioSession.type = "playback"; return; } } catch (e) {}
+  if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return;
+  if (!audioMudo) {
+    const n = 4410, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 44100, true); v.setUint32(28, 88200, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+    audioMudo = new Audio(URL.createObjectURL(new Blob([buf], { type: "audio/wav" })));
+    audioMudo.loop = true; audioMudo.setAttribute("playsinline", "");
+  }
+  if (audioMudo.paused) audioMudo.play().catch(() => {});
+}
 function audioUnlock() {
+  sessaoPlayback();
   musInit();
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state !== "running") actx.resume();
-    if (!audioUnlock.done) { // buffer mudo: destrava o áudio no iOS
+    if (actx.state !== "running") actx.resume().catch(() => {});
+    if (!audioUnlock.done) { // buffer mudo: destrava o áudio no iOS; repete a cada toque até o contexto rodar
       const b = actx.createBufferSource(); b.buffer = actx.createBuffer(1, 1, 22050); b.connect(actx.destination); b.start(0);
-      audioUnlock.done = true;
+      if (actx.state === "running") audioUnlock.done = true;
     }
   } catch (e) {}
 }
 ["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, audioUnlock, { passive: true }));
-document.addEventListener("visibilitychange", () => { if (!document.hidden && actx && actx.state !== "running") actx.resume().catch(() => {}); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { if (audioMudo) audioMudo.pause(); return; }
+  if (actx && actx.state !== "running") actx.resume().catch(() => {});
+});
 
 function gunshot() {
   musDuck(2);
