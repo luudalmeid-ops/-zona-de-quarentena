@@ -6,6 +6,10 @@ Jogo de triagem em pixel art feito pela **Valtore**. Você é o fiscal do Portã
 - **À noite, no refeitório:** os 20 moradores trazem reclamações, pedidos e acusações de infecção (às vezes só medo). Você examina, isola, defende ou executa, e pode expulsar quem pesa na comida.
 - **Facções:** Humanistas querem salvar todos; Pragmáticos, só os úteis. Qualquer uma em zero é motim.
 - **A cura** depende de cientistas e médicos vivos. Vários finais, conforme suas escolhas.
+- **Selos de liderança:** antes do primeiro dia você escolhe como vai liderar (Coração aberto, Cabeça fria, Olho clínico ou Mão de ferro). No fim, o jogo mostra como você liderou de verdade.
+- **Grupos e famílias:** casais, pais com filhos e avós com netos chegam juntos. Cada um passa pela triagem, e separar uma família tem consequência à noite.
+- **Recusar:** dá para mandar alguém embora no portão, sem exame, ou depois da triagem. Não conta erro, mas a base perde quem poderia ajudar.
+- Crianças e idosos comem 1,5 ração por dia. O gerador entra em colapso no dia 5.
 - O progresso é salvo ao fim de cada noite.
 - **Português e inglês:** escolha na tela de abertura (o padrão segue o idioma do aparelho).
 
