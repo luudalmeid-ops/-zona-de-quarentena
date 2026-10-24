@@ -424,6 +424,13 @@ body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-
 .selo-fim .real { outline: 2px solid var(--accent); }
 .selo-por { font-size: 12px; color: var(--muted); }
 .base-sub.falta { color: var(--accent); }
+.ajd { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.ajd li { display: grid; grid-template-columns: 1fr 38px 30px 38px 52px; align-items: center; gap: 6px; background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
+.ajd small { display: block; color: var(--muted); font-size: 12px; }
+.ajd button { height: 34px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px; font-size: 18px; }
+.ajd button:disabled { opacity: .35; }
+.ajd b { text-align: center; font-family: var(--f-data); font-size: 22px; font-weight: 400; }
+.ajd .d { text-align: right; color: var(--safe); font-size: 13px; }
 .copy.autor { color: var(--fg); font-size: 12px; margin-bottom: -6px; }
 .copy { display: block; font-size: 11px; color: var(--muted); letter-spacing: .04em; text-align: center; }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
@@ -606,13 +613,23 @@ function consumoTotal() { return (S.moradores || []).reduce((a, m) => a + consum
 // Sem ajudante, produz a metade. Os ajudantes vão primeiro para a pesquisa, depois comida, saúde, muro e energia.
 const ORDEM_AJUDA = ["pesquisa", "comida", "saude", "muro", "energia"];
 const ativo = m => !m.ferido && !m.isolado && !m.guarda;
+// Profissional com ajudante rende 1; sem ajudante, 0,5. Ajudante sem profissional ao lado rende 0,25.
+const efetivoCom = (w, a) => Math.min(w, a) + (w - Math.min(w, a)) * .5 + Math.max(0, a - w) * .25;
 function recount() {
   S.workers = { muro: 0, comida: 0, saude: 0, energia: 0, pesquisa: 0 };
   for (const m of S.moradores) if (m.role && ativo(m) && S.workers[m.role] !== undefined) S.workers[m.role]++;
   let livresAj = S.moradores.filter(m => !m.role && ativo(m) && !fragil(m)).length;
   S.ajudantes = livresAj; S.ajud = {}; S.efetivo = {};
-  for (const k of ORDEM_AJUDA) { S.ajud[k] = Math.min(S.workers[k], livresAj); livresAj -= S.ajud[k]; }
-  for (const k in S.workers) S.efetivo[k] = S.ajud[k] + (S.workers[k] - S.ajud[k]) * .5;
+  ORDEM_AJUDA.forEach(k => S.ajud[k] = 0);
+  // Manual: vale a divisão do jogador, e quem não foi colocado fica sem tarefa.
+  // Automático: completa os profissionais sem ajudante e manda o resto para o muro (trabalho pesado).
+  if (S.distrib) for (const k of ORDEM_AJUDA) { const a = Math.min(S.distrib[k] || 0, livresAj); S.ajud[k] = a; livresAj -= a; }
+  else {
+    for (const k of ORDEM_AJUDA) { const a = Math.min(S.workers[k], livresAj); S.ajud[k] = a; livresAj -= a; }
+    S.ajud.muro += livresAj; livresAj = 0;
+  }
+  S.ociosos = livresAj;
+  for (const k in S.workers) S.efetivo[k] = efetivoCom(S.workers[k], S.ajud[k]);
   S.pop = S.moradores.length;
 }
 function makeMorador(role, tipo) {
@@ -1765,7 +1782,7 @@ function startGame(oferecer) {
   if (sv && sv.day && sv.moradores) return oferecerContinuar(sv);
   Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
     base: { muro: 55, comida: 60, saude: 45, energia: 50 }, bat: 3, batCharge: 0, moradores: moradoresIniciais(), mortosBase: [], expulsos: [],
-    fac: { hum: 50, prag: 50 }, facLog: [], pesquisa: 0, execs: 0, execInocentes: 0, culpa: [], usados: [], racao: null, extraFila: null, filaExtra: 0, gerador3: false, acamp: [], acampInfo: false });
+    fac: { hum: 50, prag: 50 }, facLog: [], pesquisa: 0, execs: 0, execInocentes: 0, culpa: [], usados: [], racao: null, extraFila: null, filaExtra: 0, gerador3: false, acamp: [], acampInfo: false, distrib: null });
   S.selo = null; S.estilo = novoEstilo();
   recount(); renderBase();
   if (S.seenCine) escolherSelo(dayIntro);
@@ -2006,8 +2023,9 @@ function runBase() {
   S.blackout = S.base.energia <= 0;
   if (S.blackout) eventos.push((INGLES ? "No power: the floodlights went out. Tomorrow you can't examine arms or necks, and the flashlight won't recharge." : "Sem energia: os refletores apagaram. Amanhã não dá para examinar braços nem pescoço, e a lanterna não recarrega."));
   for (const r of rows) if (r.k !== "comida" && r.depois > 0 && r.depois < 25) eventos.push((INGLES ? `${BASE[r.k].nome} is at ${Math.round(r.depois)}. You need ${({ muro: "a blacksmith or welder", saude: "a doctor or nurse", energia: "an electrician or mechanic" })[r.k]}.` : `${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`));
-  const semAjuda = Object.keys(S.workers).reduce((a, k) => a + S.workers[k] - S.ajud[k], 0);
-  if (semAjuda) eventos.push(TX(`Faltam ajudantes: ${semAjuda} ${semAjuda === 1 ? "profissional trabalhou" : "profissionais trabalharam"} pela metade. Adultos sem profissão fazem o trabalho pesado.`, `Not enough helpers: ${semAjuda} ${semAjuda === 1 ? "worker" : "workers"} produced only half. Adults without a job do the heavy lifting.`));
+  const semAjuda = Object.keys(S.workers).reduce((a, k) => a + Math.max(0, S.workers[k] - S.ajud[k]), 0);
+  if (S.ociosos) eventos.push(TX(`${S.ociosos} ${S.ociosos === 1 ? "adulto ficou" : "adultos ficaram"} sem tarefa hoje. Distribua em Mão de obra.`, `${S.ociosos} ${S.ociosos === 1 ? "adult had" : "adults had"} nothing to do today. Assign them under Labor.`));
+  if (semAjuda) eventos.push(TX(`Faltam ajudantes: ${semAjuda} ${semAjuda === 1 ? "profissional trabalhou" : "profissionais trabalharam"} pela metade. Adultos sem profissão fazem o trabalho pesado: distribua em Mão de obra.`, `Not enough helpers: ${semAjuda} ${semAjuda === 1 ? "worker" : "workers"} produced only half. Adults without a job do the heavy lifting: assign them under Labor.`));
   const c = consumoTotal();
   if (S.base.comida < c * 2) eventos.push((INGLES ? `Food for less than 2 days (${Math.floor(S.base.comida)} rations for ${S.moradores.length} residents). You need a farmer or cook, or fewer mouths.` : `Comida para menos de 2 dias (${Math.floor(S.base.comida)} rações para ${S.moradores.length} moradores). Precisa de agricultor ou cozinheiro, ou de menos bocas.`));
   renderBase();
@@ -2166,12 +2184,15 @@ function endDayResumo() {
     <h2>${S.moradores.length} residents in Zone 7</h2>
     <p>Food: <b>${Math.floor(S.base.comida)}</b> rations for a consumption of ${consumoTotal()} per day.</p>
     <button class="btn ghost" id="reg" type="button">Resident registry (${S.moradores.length})</button>
+    <button class="btn ghost" id="ajd" type="button">Labor (${S.ajudantes} without a job)</button>
     <button class="btn main" id="go" type="button">Start day ${S.day + 1}</button>` : `<span class="eyebrow">Fim do turno · Dia ${S.day}</span>
     <h2>${S.moradores.length} moradores na Zona 7</h2>
     <p>Comida: <b>${Math.floor(S.base.comida)}</b> rações para um consumo de ${fmtN(consumoTotal())} por dia.</p>
     <button class="btn ghost" id="reg" type="button">Registro de moradores (${S.moradores.length})</button>
+    <button class="btn ghost" id="ajd" type="button">Mão de obra (${S.ajudantes} sem profissão)</button>
     <button class="btn main" id="go" type="button">Começar dia ${S.day + 1}</button>`));
   $("#reg").onclick = () => abrirRegistro(endDayResumo);
+  $("#ajd").onclick = () => abrirAjudantes(endDayResumo);
   $("#go").onclick = proximoDia;
 }
 function proximoDia() {
@@ -2217,6 +2238,28 @@ function abrirRegistro(voltar, ordem = "funcao") {
     ul.append(li);
   });
   document.querySelectorAll(".reg-tools [data-o]").forEach(b => b.onclick = () => abrirRegistro(voltar, b.dataset.o));
+  $("#go").onclick = voltar;
+}
+function abrirAjudantes(voltar) {
+  recount();
+  const total = S.ajudantes, d = S.distrib || Object.assign({}, S.ajud);
+  const usados = () => ORDEM_AJUDA.reduce((a, k) => a + (d[k] || 0), 0);
+  const rende = k => { const ef = efetivoCom(S.workers[k], d[k] || 0); return k === "pesquisa" ? `+${Math.round(ef * 6)}%` : `+${Math.round(ef * BASE[k].prod)}`; };
+  const linhas = ORDEM_AJUDA.map(k => `<li><span>${nomeRec(k)}<small>${S.workers[k]} ${TX("prof.", "skilled")}</small></span>
+    <button type="button" data-k="${k}" data-d="-1" ${(d[k] || 0) ? "" : "disabled"}>−</button><b>${d[k] || 0}</b><button type="button" data-k="${k}" data-d="1" ${usados() < total ? "" : "disabled"}>+</button>
+    <span class="d">${rende(k)}</span></li>`).join("");
+  openOv(`<span class="eyebrow">${TX("Mão de obra", "Labor")}</span><h2>${TX("Para onde vão os sem profissão?", "Where do the unskilled go?")}</h2>
+    <p class="dt" style="font-size:13px;color:var(--muted)">${TX(`${total} ${total === 1 ? "adulto sem profissão pode" : "adultos sem profissão podem"} trabalhar. Ao lado de um profissional, faz ele render o dobro. Sozinho, rende pouco. Crianças e idosos não trabalham.`, `${total} ${total === 1 ? "adult without a job can" : "adults without a job can"} work. Next to a skilled worker, they double the output. Alone, they add little. Children and the elderly don't work.`)}</p>
+    <ul class="ajd">${linhas}</ul>
+    <p style="font-size:13px">${S.distrib ? TX(`Sem tarefa: <b>${total - usados()}</b>`, `Unassigned: <b>${total - usados()}</b>`) : TX("Divisão automática: completa os profissionais e manda o resto para o muro.", "Automatic: fills in for the skilled workers and sends the rest to the wall.")}</p>
+    <div class="btn-row"><button class="btn ghost" id="auto" type="button">${TX("Automático", "Automatic")}</button><button class="btn main" id="go" type="button">${TX("Pronto", "Done")}</button></div>`);
+  document.querySelectorAll(".ajd button").forEach(b => b.onclick = () => {
+    const k = b.dataset.k, v = +b.dataset.d;
+    if (v > 0 && usados() >= total) return;
+    d[k] = Math.max(0, (d[k] || 0) + v); S.distrib = d; recount(); renderBase(); beep(v > 0 ? 660 : 440, .04);
+    abrirAjudantes(voltar);
+  });
+  $("#auto").onclick = () => { S.distrib = null; recount(); renderBase(); abrirAjudantes(voltar); };
   $("#go").onclick = voltar;
 }
 function confirmarExpulsao(m, voltar) {
@@ -2354,7 +2397,7 @@ $("#bManual").onclick = () => {
     <p>Each job sustains part of the base: wall (blacksmith, welder), food (farmer, cook), health (doctor, nurse), power (electrician, mechanic). Every day the wall and the supplies wear down.</p>
     <p>At the gate, the conversation can give hints, but only the exam confirms. An infected person who gets through hides among the residents and spreads the disease. Eliminating a healthy person costs 150 points and a strike.</p>
     <p>Refusing (at the gate or in screening) costs no strike, but you never find out if the person was sick. Groups and families are screened one at a time: splitting up a family has consequences at night. Children and the elderly eat 1.5 rations.</p>
-    <p>Each skilled worker needs a helper with no job, or produces half. Whoever you turn away or expel joins the resistance camp outside; with family inside, they may break in. Hooded figures accept no exam: decide by the conversation.</p>
+    <p>Each skilled worker needs a helper with no job, or produces half. At the end of the night, under Labor, you choose where the unskilled work. Whoever you turn away or expel joins the resistance camp outside; with family inside, they may break in. Hooded figures accept no exam: decide by the conversation.</p>
     <p>At night: accusations may be just fear. Examining irritates the room, isolating holds the person for 2 nights, defending pleases the Humanists, executing pleases the Pragmatists. A faction at zero means mutiny. The cure needs 100% by day ${DIAS}.</p>
     <p>Agitation at the max: the infected attack (shoot fast) and the healthy scream, draw zombies and die at the gate, damaging the wall.</p>
     <p class="info">Keyboard shortcuts: 1 to 5 for exams, E to eliminate, R to refuse, S to let in.</p>
@@ -2362,7 +2405,7 @@ $("#bManual").onclick = () => {
     <p>Cada profissão sustenta uma parte da base: muro (ferreiro, soldador), comida (agricultor, cozinheiro), saúde (médico, enfermeiro), energia (eletricista, mecânico). Todo dia o muro e os estoques se desgastam.</p>
     <p>No portão, a conversa pode dar pistas, mas só o exame confirma. Um infectado que passa se esconde entre os moradores e espalha a doença. Eliminar um saudável custa 150 pontos e um erro.</p>
     <p>Recusar (no portão ou na triagem) não conta erro, mas você nunca sabe se a pessoa estava doente. Grupos e famílias passam pela triagem um por um: separar uma família tem consequências à noite. Crianças e idosos comem 1,5 ração.</p>
-    <p>Cada profissional precisa de um ajudante sem profissão, ou produz metade. Quem você recusa ou expulsa vai para o acampamento da resistência; com família aqui dentro, eles podem invadir. Encapuzados não aceitam exame: decida pela conversa.</p>
+    <p>Cada profissional precisa de um ajudante sem profissão, ou produz metade. No fim da noite, em Mão de obra, você escolhe onde os sem profissão trabalham. Quem você recusa ou expulsa vai para o acampamento da resistência; com família aqui dentro, eles podem invadir. Encapuzados não aceitam exame: decida pela conversa.</p>
     <p>À noite: acusações podem ser só medo. Examinar irrita a sala, isolar segura a pessoa por 2 noites, defender agrada os Humanistas, executar agrada os Pragmáticos. Facção em zero é motim. A cura precisa de 100% até o dia ${DIAS}.</p>
     <p>Agitação no máximo: o infectado ataca (atire rápido) e o saudável grita, atrai zumbis e morre no portão, danificando o muro.</p>
     <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, R para recusar, S para salvar.</p>
@@ -2873,16 +2916,16 @@ function resumoNoite() {
       <div class="r"><span>Cure<small>${S.workers.pesquisa || 0} scientist(s), ${S.workers.saude || 0} doctor(s)/nurse(s)</small></span><span class="d pos">+${N.resumo.dp}%</span><b>${Math.round(S.pesquisa)}%</b></div></div>
     ${alertas.map(a => `<div class="evento">${a}</div>`).join("")}
     ${!ultimo && precisa > 0 ? `<p style="font-size:13px;color:var(--muted)">${faltam} ${faltam === 1 ? "day" : "days"} and ${Math.ceil(precisa)}% of research left. At the current pace: +${ritmoPesquisa()}% per night.</p>` : ""}
-    ${ultimo ? "" : `<button class="btn ghost" id="reg" type="button">Resident registry (${S.moradores.length})</button>`}
+    ${ultimo ? "" : `<button class="btn ghost" id="reg" type="button">Resident registry (${S.moradores.length})</button><button class="btn ghost" id="ajd" type="button">Labor (${S.ajudantes} without a job)</button>`}
     <button class="btn main" id="go" type="button">${ultimo ? "See the dawn" : "Sleep"}</button>` : `<span class="eyebrow">Fim da noite · Dia ${S.day} de ${DIAS}</span>
     <h2>${S.moradores.length} moradores dormem na Zona 7</h2>
     <div class="report">${linha("Humanistas", "hum")}${linha("Pragmáticos", "prag")}
       <div class="r"><span>Cura<small>${S.workers.pesquisa || 0} cientista(s), ${S.workers.saude || 0} médico(s)/enfermeiro(s)</small></span><span class="d pos">+${N.resumo.dp}%</span><b>${Math.round(S.pesquisa)}%</b></div></div>
     ${alertas.map(a => `<div class="evento">${a}</div>`).join("")}
     ${!ultimo && precisa > 0 ? `<p style="font-size:13px;color:var(--muted)">Faltam ${faltam} ${faltam === 1 ? "dia" : "dias"} e ${Math.ceil(precisa)}% de pesquisa. No ritmo atual: +${ritmoPesquisa()}% por noite.</p>` : ""}
-    ${ultimo ? "" : `<button class="btn ghost" id="reg" type="button">Registro de moradores (${S.moradores.length})</button>`}
+    ${ultimo ? "" : `<button class="btn ghost" id="reg" type="button">Registro de moradores (${S.moradores.length})</button><button class="btn ghost" id="ajd" type="button">Mão de obra (${S.ajudantes} sem profissão)</button>`}
     <button class="btn main" id="go" type="button">${ultimo ? "Ver o amanhecer" : "Dormir"}</button>`));
-  if (!ultimo) $("#reg").onclick = () => abrirRegistro(resumoNoite);
+  if (!ultimo) { $("#reg").onclick = () => abrirRegistro(resumoNoite); $("#ajd").onclick = () => abrirAjudantes(resumoNoite); }
   $("#go").onclick = ultimo ? finalDoJogo : proximoDia;
 }
 const jkx = $("#jv").getContext("2d"), JK = painter(jkx);
@@ -2958,7 +3001,7 @@ function finalDoJogo() {
 // ---------- Progresso salvo ----------
 const SAVE_KEY = "zq-save-v2" + (INGLES ? "-en" : "");
 const SAVE_CAMPOS = ["day", "score", "strikes", "streak", "base", "moradores", "fac", "pesquisa", "bat", "batCharge", "blackout", "gerador3",
-  "mortosBase", "expulsos", "execs", "execInocentes", "culpa", "extraFila", "filaExtra", "racao", "usados", "tutDone", "selo", "estilo", "acamp", "acampInfo"];
+  "mortosBase", "expulsos", "execs", "execInocentes", "culpa", "extraFila", "filaExtra", "racao", "usados", "tutDone", "selo", "estilo", "acamp", "acampInfo", "distrib"];
 function salvar() { try { const o = {}; SAVE_CAMPOS.forEach(k => o[k] = S[k]); localStorage.setItem(SAVE_KEY, JSON.stringify(o)); } catch (e) {} }
 function carregarSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return null; } }
 function limparSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
@@ -2972,7 +3015,7 @@ function oferecerContinuar(sv) {
     <div class="btn-row"><button class="btn ghost" id="novo" type="button">Novo jogo</button><button class="btn main" id="go" type="button">Continuar</button></div>`));
   $("#go").onclick = () => {
     closeOv(); Object.assign(S, sv, { seenCine: true, facLog: [] });
-    S.selo = sv.selo || null; S.estilo = Object.assign(novoEstilo(), sv.estilo || {}); S.acamp = sv.acamp || []; S.acampInfo = !!sv.acampInfo;
+    S.selo = sv.selo || null; S.estilo = Object.assign(novoEstilo(), sv.estilo || {}); S.acamp = sv.acamp || []; S.acampInfo = !!sv.acampInfo; S.distrib = sv.distrib || null;
     S.tutDone = sv.tutDone || {};
     recount(); renderBase(); dayIntro();
   };
@@ -3128,7 +3171,7 @@ function loop() {
   setTimeout(fim, 3500);
   if (location.hash === "#debug") fim();
 })();
-if (location.hash === "#debug") window.__zq = { S, makePerson, makeGrupo, pontosSelo, seloReal, fecharGrupo, gameOver, finalDoJogo, makeEncapuzado, noiteEventos, invasao, armar, desarmar, aliado, abrirRegistro, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais, casoAcusacao, proximoCaso };
+if (location.hash === "#debug") window.__zq = { S, abrirAjudantes, recount, makePerson, makeGrupo, pontosSelo, seloReal, fecharGrupo, gameOver, finalDoJogo, makeEncapuzado, noiteEventos, invasao, armar, desarmar, aliado, abrirRegistro, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais, casoAcusacao, proximoCaso };
 renderTools(); renderFicha(); renderHUD();
 startGame(true);
 requestAnimationFrame(loop);
