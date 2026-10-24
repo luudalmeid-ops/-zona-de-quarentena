@@ -1158,7 +1158,7 @@ function gateStart(p) {
   const g = grupoDe(p), membros = g ? g.membros.filter((_, k) => !g.res[k]) : [p];
   if (p.encap) p.oferta = ofertaPara();
   S.g = { lines: p.encap ? falasEncap(p) : membros.length > 1 ? falasGrupo(membros) : falasPortao(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0, membros };
-  if (p.encap && !S.tutDone.encap) { S.tutDone.encap = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Um <b>encapuzado</b>. Ele não tira o capuz e não aceita exame: você decide só pela conversa, e pode fazer <b>2 perguntas</b>. Ele oferece justamente o que a base mais precisa. Recusar faz essa crise piorar.", "A <b>hooded figure</b>. They won't remove the hood or accept an exam: you decide by the conversation alone, and you get <b>2 questions</b>. They offer exactly what the base needs most. Refusing makes that crisis worse."), wait: "encap" }]), 700); }
+  if (p.encap && !S.tutDone.encap) { S.tutDone.encap = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Um <b>encapuzado</b>. Ele não tira o capuz e não aceita exame: você decide só pela conversa, e pode fazer <b>2 perguntas</b>.", "A <b>hooded figure</b>. They won't remove the hood or accept an exam: you decide by the conversation alone, and you get <b>2 questions</b>."), wait: "encap" }]), 700); }
   S.agit = 0; S.graca = 0;
   $("#pFala").textContent = `“${textoFala(S.g.lines[S.g.lines.length - 1])}”`;
   if (membros.length > 1 && !S.tutDone.grupo) { S.tutDone.grupo = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Chegou um <b>grupo</b>. Se você levar para a triagem, cada pessoa é examinada e decidida <b>uma por uma</b>. Você pode deixar uns entrarem e outros não, mas separar uma família tem consequências. Também pode <b>mandar todos embora</b> sem exame.", "A <b>group</b> has arrived. If you take them to screening, each person is examined and decided <b>one at a time</b>. You can let some in and not others, but splitting up a family has consequences. You can also <b>send them all away</b> without screening."), wait: "grupo" }]), 700); }
@@ -1277,10 +1277,10 @@ function renderGate() {
   if (g.saindo) return;
   const opt = (txt, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "opt" + (cls ? " " + cls : ""); b.textContent = txt; b.onclick = fn; ch.append(b); };
   if (S.cur && S.cur.encap) {
-    const k = S.cur.oferta, v = k === "pesquisa" ? 10 : 20;
     if (Object.keys(g.asked).length < 2) for (const q in PERG_ENC) if (!g.asked[q]) opt(TX("Perguntar: “", "Ask: “") + PERG_ENC[q] + "”", "", () => gateAskEnc(q));
-    opt(TX(`Recusar (${nomeRec(k)} ${qtdRec(k, k === "pesquisa" ? -5 : -10)})`, `Refuse (${nomeRec(k)} ${qtdRec(k, k === "pesquisa" ? -5 : -10)})`), "bad", recusarEncap);
-    opt(TX(`Aceitar a oferta (${nomeRec(k)} ${qtdRec(k, v)})`, `Accept the offer (${nomeRec(k)} ${qtdRec(k, v)})`), "go", aceitarEncap);
+    // o ganho ou a perda só aparece depois da escolha
+    opt(TX("Recusar", "Refuse"), "bad", recusarEncap);
+    opt(TX("Aceitar a oferta", "Accept the offer"), "go", aceitarEncap);
     return;
   }
   const triagem = grupo ? TX("Levar o grupo para a triagem", "Take the group to screening") : (INGLES ? "Take to screening" : "Levar para a triagem");
