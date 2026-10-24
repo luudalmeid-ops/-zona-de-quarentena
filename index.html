@@ -1050,7 +1050,7 @@ function gateStart(p) {
   S.phase = "gate";
   const g = grupoDe(p), membros = g ? g.membros.filter((_, k) => !g.res[k]) : [p];
   S.g = { lines: membros.length > 1 ? falasGrupo(membros) : falasPortao(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0, membros };
-  S.agit = 0;
+  S.agit = 0; S.graca = 0;
   $("#pFala").textContent = `“${textoFala(S.g.lines[S.g.lines.length - 1])}”`;
   if (membros.length > 1 && !S.tutDone.grupo) { S.tutDone.grupo = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Chegou um <b>grupo</b>. Se você levar para a triagem, cada pessoa é examinada e decidida <b>uma por uma</b>. Você pode deixar uns entrarem e outros não, mas separar uma família tem consequências. Também pode <b>mandar todos embora</b> sem exame.", "A <b>group</b> has arrived. If you take them to screening, each person is examined and decided <b>one at a time</b>. You can let some in and not others, but splitting up a family has consequences. You can also <b>send them all away</b> without screening."), wait: "grupo" }]), 700); }
   $("#mesa").hidden = true; $("#gate").hidden = false;
@@ -1114,7 +1114,7 @@ function gateSoCrianca(kid) {
   preencherIdent(kid);
   toast(TX(`${fora.map(primeiro).join(" e ")} ${fora.length > 1 ? "voltam" : "volta"} para a estrada sem ${primeiro(kid)}.`, `${fora.map(primeiro).join(" and ")} ${fora.length > 1 ? "head" : "heads"} back to the road without ${primeiro(kid)}.`), "bad");
   toExam();
-  S.agit = .35;
+  S.agit = .2; S.graca = 3;
   const a = fora[0];
   flinch(gr && gr.tipo === "avoNeto" ? TX(`${a.fem ? "VÓ" : "VÔ"}! NÃO!`, `${a.fem ? "GRANDMA" : "GRANDPA"}! NO!`) : TX(`${a.fem ? "MÃE" : "PAI"}! NÃO!`, `${a.fem ? "MOM" : "DAD"}! NO!`));
 }
@@ -1123,12 +1123,12 @@ function examinarDireto(p, gr) {
   S.phase = "gate";
   S.g = { lines: [""], li: 0, shown: 0, mode: "menu", asked: {}, walk: 1, me: false, wait: 0, membros: [p] };
   toExam();
-  S.agit = 0;
+  S.agit = 0; S.graca = 3; // segundos para a pessoa reagir antes de a agitação começar a subir
   const u = gr.ultimo; if (!u) return;
   const n = primeiro(u.p);
-  if (u.r === "morto") { S.agit = .55; flinch(p.crianca ? TX(`${n.toUpperCase()}! NÃO!`, `${n.toUpperCase()}! NO!`) : TX(`Você matou ${n}! Na minha frente!`, `You killed ${n}! Right in front of me!`)); }
-  else if (u.r === "fora") { S.agit = .4; flinch(TX(`Não manda ${n} embora! A gente fica junto!`, `Don't send ${n} away! We stay together!`)); }
-  else { S.agit = .1; flinch(TX(`${n} já tá lá dentro... e eu?`, `${n} is already inside... what about me?`)); }
+  if (u.r === "morto") { S.agit = .3; flinch(p.crianca ? TX(`${n.toUpperCase()}! NÃO!`, `${n.toUpperCase()}! NO!`) : TX(`Você matou ${n}! Na minha frente!`, `You killed ${n}! Right in front of me!`)); }
+  else if (u.r === "fora") { S.agit = .2; flinch(TX(`Não manda ${n} embora! A gente fica junto!`, `Don't send ${n} away! We stay together!`)); }
+  else { S.agit = 0; flinch(TX(`${n} já tá lá dentro... e eu?`, `${n} is already inside... what about me?`)); }
 }
 function recusarExame() {
   if (!S.cur || S.phase !== "play") return;
@@ -2838,7 +2838,8 @@ function loop() {
     const p = S.cur, prev = S.agit;
     // Saudáveis e infectados se agitam no mesmo ritmo (com variação por pessoa): esperar não revela nada, só aumenta o risco.
     p.agitRate = 1 / AGIT_SEG;
-    if (!S.tut) S.agit = Math.min(1, S.agit + dt * p.agitRate);
+    if (S.graca > 0) S.graca -= dt;
+    else if (!S.tut) S.agit = Math.min(1, S.agit + dt * p.agitRate);
     if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
     if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : pick([(INGLES ? "Please! I have a family!" : "Por favor! Eu tenho família!"), (INGLES ? "I can't wait any longer!" : "Eu não aguento mais esperar!"), (INGLES ? "(starts to hyperventilate)" : "(começa a hiperventilar)")]));
     if (S.agit >= 1 && S.phase === "play") p.infected ? startLunge() : panic();
