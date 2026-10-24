@@ -423,6 +423,7 @@ body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-
 .selo-fim b { font-family: var(--f-display); font-size: 14px; text-transform: uppercase; }
 .selo-fim .real { outline: 2px solid var(--accent); }
 .selo-por { font-size: 12px; color: var(--muted); }
+.base-sub.falta { color: var(--accent); }
 .copy.autor { color: var(--fg); font-size: 12px; margin-bottom: -6px; }
 .copy { display: block; font-size: 11px; color: var(--muted); letter-spacing: .04em; text-align: center; }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
@@ -601,9 +602,17 @@ const fragil = m => !!m.crianca || m.idade > 64;
 const consumo = m => fragil(m) ? 1.5 : 1;
 const fmtN = v => INGLES ? String(v) : String(v).replace(".", ",");
 function consumoTotal() { return (S.moradores || []).reduce((a, m) => a + consumo(m), 0) * (S.racao ? S.racao.fator : 1); }
+// Cada profissional precisa de um ajudante: um adulto sem função (crianças e idosos não ajudam).
+// Sem ajudante, produz a metade. Os ajudantes vão primeiro para a pesquisa, depois comida, saúde, muro e energia.
+const ORDEM_AJUDA = ["pesquisa", "comida", "saude", "muro", "energia"];
+const ativo = m => !m.ferido && !m.isolado && !m.guarda;
 function recount() {
   S.workers = { muro: 0, comida: 0, saude: 0, energia: 0, pesquisa: 0 };
-  for (const m of S.moradores) if (m.role && !m.ferido && !m.isolado && S.workers[m.role] !== undefined) S.workers[m.role]++;
+  for (const m of S.moradores) if (m.role && ativo(m) && S.workers[m.role] !== undefined) S.workers[m.role]++;
+  let livresAj = S.moradores.filter(m => !m.role && ativo(m) && !fragil(m)).length;
+  S.ajudantes = livresAj; S.ajud = {}; S.efetivo = {};
+  for (const k of ORDEM_AJUDA) { S.ajud[k] = Math.min(S.workers[k], livresAj); livresAj -= S.ajud[k]; }
+  for (const k in S.workers) S.efetivo[k] = S.ajud[k] + (S.workers[k] - S.ajud[k]) * .5;
   S.pop = S.moradores.length;
 }
 function makeMorador(role, tipo) {
@@ -627,9 +636,9 @@ function moradoresIniciais() {
   const a = [];
   ["muro", "muro", "comida", "comida", "saude", "saude", "energia", "energia"].forEach(r => a.push(makeMorador(r)));
   a.push(makeMorador("pesquisa"));
-  for (let i = 0; i < 5; i++) a.push(makeMorador(null));
-  for (let i = 0; i < 3; i++) a.push(makeMorador(null, "crianca"));
-  for (let i = 0; i < 3; i++) a.push(makeMorador(null, "idoso"));
+  for (let i = 0; i < 7; i++) a.push(makeMorador(null));
+  for (let i = 0; i < 2; i++) a.push(makeMorador(null, "crianca"));
+  for (let i = 0; i < 2; i++) a.push(makeMorador(null, "idoso"));
   const usados = new Set();
   a.forEach(m => { while (usados.has(m.nome)) m.nome = `${pick(m.fem ? NOMES_F : NOMES_M)} ${pick(SOBRENOMES)}`; usados.add(m.nome); });
   return a;
@@ -785,6 +794,7 @@ const facRecusa = m => m.crianca ? [-6, 0] : m.idade > 64 ? [-3, 1] : [-2, 1];
 function recusar(m) {
   if (S.estilo) S.estilo.recusados++;
   S.streak = 0; S.dia.recusados = (S.dia.recusados || 0) + 1;
+  (S.acamp = S.acamp || []).push({ nome: m.nome, dia: S.day });
   if (!grupoDe(m)) { const [h, pr] = facRecusa(m); fac(h, pr, m.crianca ? TX("Criança deixada na estrada", "Child left on the road") : TX("Sobrevivente recusado", "Survivor turned away")); }
   marcar(m, "fora");
 }
@@ -813,6 +823,99 @@ function fecharGrupo(g) {
   }
   if (h || pr) fac(h, pr, separou ? TX("Família separada", "Family split up") : TX("Família recusada", "Family turned away"));
   g.membros.forEach(m => delete m.gid); // quem entrou vira morador comum (o número do grupo não vai para o save)
+}
+
+// ---------- Encapuzados ----------
+// Não tiram o capuz nem aceitam exame. Oferecem o recurso em crise; recusar faz a crise piorar.
+const PERG_ENC = { capuz: TX("Por que o capuz?", "Why the hood?"), origem: TX("De onde veio o que você oferece?", "Where did you get what you're offering?"),
+  destino: TX("Para onde você vai depois?", "Where are you going after this?"), maos: TX("Mostra as mãos.", "Show me your hands.") };
+const RESP_ENC = {
+  capuz: { normal: [["Tenho o rosto queimado. Ninguém precisa ver isso.", "My face is burned. Nobody needs to see that."], ["Tem gente lá fora me procurando. Melhor não saberem que estou aqui.", "There are people out there looking for me. Better they don't know I'm here."]],
+    ladrao: [["Isso não é da sua conta. Quer o material ou não?", "That's none of your business. Do you want the goods or not?"], ["Hábito. Na estrada, quem mostra o rosto vira alvo.", "Habit. On the road, showing your face makes you a target."]],
+    informante: [["Para ninguém lembrar de mim. Nem aqui dentro.", "So nobody remembers me. Not even in here."], ["E vocês, quantos vigias têm nesse muro? Só pra saber se é seguro.", "And how many guards do you have on this wall? Just to know it's safe."]],
+    infectado: [["A luz... me incomoda. Só isso.", "The light... bothers me. That's all."], ["Estou com frio. Muito frio.", "I'm cold. So cold."]],
+    neutro: [["Só quero passar a noite em paz.", "I just want to spend the night in peace."]] },
+  origem: { normal: [p => [`Do posto de saúde de ${p.origem}. Peguei antes de saquearem.`, `From the clinic in ${p.origem}. I took it before it was looted.`], ["Era do meu irmão. Ele não voltou da última saída.", "It was my brother's. He didn't come back from his last run."]],
+    ladrao: [["Achei. Por aí.", "Found it. Around."], ["Faz diferença? Está aqui, não está?", "Does it matter? It's here, isn't it?"]],
+    informante: [["De uma base ao norte. A de vocês é maior, né? Quantos moram aqui?", "From a base up north. Yours is bigger, right? How many live here?"]],
+    infectado: [["Era... de um amigo. Ele não precisa mais. (tosse)", "It was... a friend's. He doesn't need it anymore. (coughs)"]],
+    neutro: [["Juntei pelo caminho.", "I picked it up along the way."]] },
+  destino: { normal: [["Pra lugar nenhum. Se deixarem, quero ficar e trabalhar.", "Nowhere. If you let me, I want to stay and work."]],
+    ladrao: [["Depende. Onde vocês guardam a comida?", "Depends. Where do you keep the food?"], ["Pra onde der. Eu não paro muito tempo num lugar.", "Wherever. I don't stay anywhere long."]],
+    informante: [["Embora, amanhã cedo. Só preciso de uma noite.", "Away, early tomorrow. I only need one night."], ["Tem gente me esperando na estrada.", "There are people waiting for me on the road."]],
+    infectado: [["Eu só preciso dormir... dormir muito.", "I just need to sleep... sleep a lot."], ["Pra perto do fogo, se deixarem. Não paro de tremer.", "Near the fire, if you let me. I can't stop shaking."]],
+    neutro: [["Ainda não sei.", "I don't know yet."]] },
+  maos: { normal: [["(mostra as mãos sujas de terra, firmes)", "(shows hands caked with dirt, steady)"]],
+    ladrao: [["(mostra as mãos rápido e esconde de novo; anéis demais)", "(flashes their hands and hides them again; too many rings)"]],
+    informante: [["(mostra as mãos, limpas demais para quem vive na estrada)", "(shows hands far too clean for someone living on the road)"]],
+    infectado: [["(não tira as mãos de dentro da capa)", "(won't take their hands out of the cloak)"], ["(as mãos tremem; as unhas estão roxas)", "(the hands shake; the nails are purple)"]],
+    neutro: [["(mostra as mãos, sujas da estrada)", "(shows hands dirty from the road)"]] },
+};
+function respostaEnc(p, k) {
+  const tipo = p.encap.tipo;
+  let pool = chance(.7) ? RESP_ENC[k][tipo] : RESP_ENC[k].neutro; // a pista aparece em 70% das respostas
+  if (tipo === "normal" && chance(.2)) pool = RESP_ENC[k][pick(["ladrao", "informante", "infectado"])]; // o medo também parece suspeito
+  const r = pick(pool), par = typeof r === "function" ? r(p) : r;
+  return TX(par[0], par[1]);
+}
+const OFERTA_ITEM = { muro: () => TX("ferramentas e chapas de solda", "tools and welding plates"), comida: () => TX("sacos de arroz e enlatados", "sacks of rice and canned food"),
+  saude: () => TX("uma caixa de remédios", "a box of medicine"), energia: () => TX("uma bateria de gerador e combustível", "a generator battery and fuel"), pesquisa: () => TX("anotações de outro laboratório", "notes from another lab") };
+const nomeRec = k => k === "pesquisa" ? TX("Cura", "Cure") : BASE[k].nome;
+const qtdRec = (k, v) => k === "pesquisa" ? `${v > 0 ? "+" : "−"}${Math.abs(v)}%` : `${v > 0 ? "+" : "−"}${Math.abs(v)}`;
+function ofertaPara() {
+  // o recurso mais em crise agora (a comida conta em dias; a cura, se estiver atrasada)
+  const nivel = { muro: S.base.muro, saude: S.base.saude, energia: S.base.energia, comida: S.base.comida / (consumoTotal() || 1) * 15, pesquisa: S.pesquisa < S.day * 9 ? 28 : 999 };
+  return Object.keys(nivel).sort((a, b) => nivel[a] - nivel[b])[0];
+}
+function aplicarRec(k, v) { if (k === "pesquisa") S.pesquisa = Math.max(0, Math.min(100, S.pesquisa + v)); else addRes(k, v); }
+function makeEncapuzado(day) {
+  const r = Math.random(), tipo = r < .4 ? "normal" : r < .6 ? "ladrao" : r < .75 ? "informante" : "infectado";
+  const p = makePerson(day, { infected: tipo === "infectado", idade: RI(20, 60) });
+  p.encap = { tipo, nome: p.nome, oficio: p.oficio, role: p.role, pele: p.pele, estilo: p.estilo };
+  return Object.assign(p, { nome: TX("Encapuzado", "Hooded figure"), oficio: "?", role: null, pele: "#2b2622", estilo: "capuz", barba: false, oculos: false, roupa: "#3b3631" });
+}
+function falasEncap(p) {
+  return [{ q: null, t: TX("(o rosto some na sombra do capuz)", "(the face disappears into the shadow of the hood)") },
+    TX(`Tenho ${OFERTA_ITEM[p.oferta]()}. É seu, se eu puder entrar.`, `I have ${OFERTA_ITEM[p.oferta]()}. It's yours if I can come in.`),
+    TX("Mas o capuz fica.", "But the hood stays on.")];
+}
+function gateAskEnc(k) {
+  const g = S.g; g.asked[k] = true; g.mode = "fala"; g.me = true;
+  g.lines = [PERG_ENC[k], respostaEnc(S.cur, k)]; g.li = 0; g.shown = 0; g.wait = 0; g.walk = 1;
+  tutEvent("encap"); renderGate();
+}
+function aceitarEncap() {
+  const g = S.g, p = S.cur; if (S.phase !== "gate" || g.saindo) return;
+  tutEvent("encap");
+  const k = p.oferta, v = k === "pesquisa" ? 10 : 20;
+  aplicarRec(k, v);
+  const e = S.estilo; if (e) { e.encapAceitos = (e.encapAceitos || 0) + 1; if (p.encap.tipo === "normal") e.encapCertos = (e.encapCertos || 0) + 1; }
+  admit(p); S.dia.salvos++;
+  g.saindo = true; g.mode = "saindo"; renderGate();
+  beep(660, .09); beep(990, .12, "square", .04);
+  toast(TX(`O encapuzado entra sem tirar o capuz. ${nomeRec(k)} ${qtdRec(k, v)}.`, `The hooded figure walks in without removing the hood. ${nomeRec(k)} ${qtdRec(k, v)}.`), "ok");
+  if (k !== "pesquisa") flashBase(k, "pulse");
+  renderBase(); renderHUD();
+  setTimeout(() => { S.idx++; nextPerson(); }, 1500);
+}
+const PERDA_ENC = { muro: () => TX("Ele vai embora com as ferramentas. Sem elas, o muro cede mais um pouco: Muro −10.", "They leave with the tools. Without them, the wall gives a little more: Wall −10."),
+  comida: () => TX("Ele vai embora com a comida. Hoje, alguém fica sem jantar: Comida −10.", "They leave with the food. Tonight, someone goes without dinner: Food −10."),
+  saude: () => TX("Ele vai embora com os remédios. Sem eles, a doença avança: Saúde −10.", "They leave with the medicine. Without it, the sickness spreads: Health −10."),
+  energia: () => TX("Ele vai embora com a bateria. Os refletores piscam mais uma vez: Energia −10.", "They leave with the battery. The floodlights flicker once more: Power −10."),
+  pesquisa: () => TX("Ele vai embora com as anotações. O laboratório perde um dia de trabalho: Cura −5%.", "They leave with the notes. The lab loses a day of work: Cure −5%.") };
+function recusarEncap() {
+  const g = S.g, p = S.cur; if (S.phase !== "gate" || g.saindo) return;
+  tutEvent("encap");
+  const k = p.oferta;
+  aplicarRec(k, k === "pesquisa" ? -5 : -10);
+  const e = S.estilo; if (e && p.encap.tipo !== "normal") e.encapCertos = (e.encapCertos || 0) + 1;
+  recusar(p);
+  g.saindo = true; g.mode = "saindo"; renderGate();
+  beep(180, .3, "sawtooth", .04, -40);
+  toast(PERDA_ENC[k](), "bad");
+  if (k !== "pesquisa") flashBase(k, "hurt");
+  renderBase(); renderHUD();
+  setTimeout(() => { S.idx++; nextPerson(); }, 1600);
 }
 
 // ---------- Desenho ----------
@@ -879,6 +982,10 @@ function drawPortrait(p, t, P = Pcv) {
   if (p.barba) { const b = shade(hair, -.1); P(16, 26 + o, 16, 5, b); P(18, 31 + o, 12, 1, b); P(21, 27 + o, 6, 1, shade(sk, -.35)); }
   else P(21, 27 + o, 6, 1, shade(sk, -.35));
   if (p.idade > 55) { P(17, 23 + o, 2, 1, skD); P(29, 23 + o, 2, 1, skD); }
+  if (p.estilo === "capuz") {
+    P(12, 4 + o, 24, 30, "#4a443c"); P(9, 30 + o, 30, 8, "#4a443c"); P(16, 12 + o, 16, 20, "#070707");
+    P(14, 8 + o, 2, 24, "#2e2a26"); P(32, 8 + o, 2, 24, "#2e2a26");
+  }
   if (P === Pcv && p === S.cur && S.phase === "lunge") {
     P(18, 20 + o, 4, 2, "#e8d040"); P(26, 20 + o, 4, 2, "#e8d040"); P(20, 20 + o, 1, 2, "#300"); P(28, 20 + o, 1, 2, "#300");
     P(17, 18 + o, 5, 1, "#2a1010"); P(26, 18 + o, 5, 1, "#2a1010");
@@ -1049,7 +1156,9 @@ const textoFala = l => typeof l === "string" ? l : l ? l.t : "";
 function gateStart(p) {
   S.phase = "gate";
   const g = grupoDe(p), membros = g ? g.membros.filter((_, k) => !g.res[k]) : [p];
-  S.g = { lines: membros.length > 1 ? falasGrupo(membros) : falasPortao(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0, membros };
+  if (p.encap) p.oferta = ofertaPara();
+  S.g = { lines: p.encap ? falasEncap(p) : membros.length > 1 ? falasGrupo(membros) : falasPortao(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0, membros };
+  if (p.encap && !S.tutDone.encap) { S.tutDone.encap = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Um <b>encapuzado</b>. Ele não tira o capuz e não aceita exame: você decide só pela conversa, e pode fazer <b>2 perguntas</b>. Ele oferece justamente o que a base mais precisa. Recusar faz essa crise piorar.", "A <b>hooded figure</b>. They won't remove the hood or accept an exam: you decide by the conversation alone, and you get <b>2 questions</b>. They offer exactly what the base needs most. Refusing makes that crisis worse."), wait: "encap" }]), 700); }
   S.agit = 0; S.graca = 0;
   $("#pFala").textContent = `“${textoFala(S.g.lines[S.g.lines.length - 1])}”`;
   if (membros.length > 1 && !S.tutDone.grupo) { S.tutDone.grupo = true; setTimeout(() => tutStart([{ el: "#choices", txt: TX("Chegou um <b>grupo</b>. Se você levar para a triagem, cada pessoa é examinada e decidida <b>uma por uma</b>. Você pode deixar uns entrarem e outros não, mas separar uma família tem consequências. Também pode <b>mandar todos embora</b> sem exame.", "A <b>group</b> has arrived. If you take them to screening, each person is examined and decided <b>one at a time</b>. You can let some in and not others, but splitting up a family has consequences. You can also <b>send them all away</b> without screening."), wait: "grupo" }]), 700); }
@@ -1156,6 +1265,7 @@ function renderGate() {
   const g = S.g, L = gateLine(), done = g.shown >= L.length;
   const isMe = g.me && g.li === 0, q = gateQuem(), grupo = g.membros.length > 1;
   $("#dlgWho").textContent = isMe ? (INGLES ? "You" : "Você") : q ? `${q.nome} · ${q.rel}` : q === null ? TX("No portão", "At the gate")
+    : S.cur && S.cur.encap ? TX("Encapuzado no portão", "Hooded figure at the gate")
     : grupo ? TX("Grupo no portão", "Group at the gate") : (INGLES ? "Survivor at the gate" : "Sobrevivente no portão");
   $("#dlgTxt").className = "txt" + (isMe ? " me" : "");
   $("#dlgTxt").textContent = L.slice(0, Math.floor(g.shown));
@@ -1166,6 +1276,13 @@ function renderGate() {
   ch.dataset.key = key; ch.innerHTML = "";
   if (g.saindo) return;
   const opt = (txt, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "opt" + (cls ? " " + cls : ""); b.textContent = txt; b.onclick = fn; ch.append(b); };
+  if (S.cur && S.cur.encap) {
+    const k = S.cur.oferta, v = k === "pesquisa" ? 10 : 20;
+    if (Object.keys(g.asked).length < 2) for (const q in PERG_ENC) if (!g.asked[q]) opt(TX("Perguntar: “", "Ask: “") + PERG_ENC[q] + "”", "", () => gateAskEnc(q));
+    opt(TX(`Recusar (${nomeRec(k)} ${qtdRec(k, k === "pesquisa" ? -5 : -10)})`, `Refuse (${nomeRec(k)} ${qtdRec(k, k === "pesquisa" ? -5 : -10)})`), "bad", recusarEncap);
+    opt(TX(`Aceitar a oferta (${nomeRec(k)} ${qtdRec(k, v)})`, `Accept the offer (${nomeRec(k)} ${qtdRec(k, v)})`), "go", aceitarEncap);
+    return;
+  }
   const triagem = grupo ? TX("Levar o grupo para a triagem", "Take the group to screening") : (INGLES ? "Take to screening" : "Levar para a triagem");
   if (g.recusa) {
     opt(grupo ? TX("Mandar todos embora", "Send them all away") : TX("Mandar embora mesmo assim", "Send them away anyway"), "bad", gateSair);
@@ -1227,6 +1344,7 @@ function person(K0, p, x0, b0, t, walking, sc = 1) {
     case "coque": K(x - 3, base - 35, 6, 2, hair); K(x - 1, base - 37, 3, 2, hair); break;
     case "bone": K(x - 4, base - 35, 7, 3, shade(roupa, -.3)); K(x - 5, base - 33, 3, 1, shade(roupa, -.45)); break;
     case "careca": break;
+    case "capuz": K(x - 4, base - 38, 8, 4, "#4a443c"); K(x - 5, base - 35, 2, 10, "#4a443c"); K(x + 3, base - 35, 2, 10, "#4a443c"); K(x - 3, base - 34, 6, 8, "#070707"); break;
     default: K(x - 3, base - 35, 6, 2, hair);
   }
   if (p.barba) K(x - 3, base - 29, 6, 3, shade(hair, -.1));
@@ -1620,10 +1738,10 @@ function pontosSelo() {
   const e = S.estilo || novoEstilo(), acc = e.decisoes ? e.acertos / e.decisoes : 0;
   // Cada selo mede o que só ele faz: acolher quem custa caro, cortar quem pesa, acertar no exame, usar a força.
   return {
-    coracao: Math.max(0, e.h) / 4 + (e.fragilSalvos || 0) - e.recusados - S.expulsos.length * 2,
+    coracao: Math.max(0, e.h) / 4 + (e.fragilSalvos || 0) + (e.encapAceitos || 0) * .5 - e.recusados - S.expulsos.length * 2,
     cabeca: e.recusados + S.expulsos.length * 2 + Math.max(0, e.p) / 4,
-    olho: e.decisoes >= 4 ? (acc - .8) * e.decisoes * 2 - S.strikes * 4 - S.execInocentes * 4 : 0,
-    mao: S.execs * 3 + S.execInocentes * 3 + S.strikes * 3 + e.separou * 1.5 + (e.tiroSemExame || 0) * 2,
+    olho: (e.decisoes >= 4 ? (acc - .8) * e.decisoes * 2 - S.strikes * 4 - S.execInocentes * 4 : 0) + (e.encapCertos || 0) * 1.5,
+    mao: S.execs * 3 + S.execInocentes * 3 + S.strikes * 3 + e.separou * 1.5 + (e.tiroSemExame || 0) * 2 + (e.armou || 0) * 2,
   };
 }
 function seloReal() { const pt = pontosSelo(); return Object.keys(pt).sort((a, b) => pt[b] - pt[a])[0]; }
@@ -1647,7 +1765,7 @@ function startGame(oferecer) {
   if (sv && sv.day && sv.moradores) return oferecerContinuar(sv);
   Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
     base: { muro: 55, comida: 60, saude: 45, energia: 50 }, bat: 3, batCharge: 0, moradores: moradoresIniciais(), mortosBase: [], expulsos: [],
-    fac: { hum: 50, prag: 50 }, facLog: [], pesquisa: 0, execs: 0, execInocentes: 0, culpa: [], usados: [], racao: null, extraFila: null, filaExtra: 0, gerador3: false });
+    fac: { hum: 50, prag: 50 }, facLog: [], pesquisa: 0, execs: 0, execInocentes: 0, culpa: [], usados: [], racao: null, extraFila: null, filaExtra: 0, gerador3: false, acamp: [], acampInfo: false });
   S.selo = null; S.estilo = novoEstilo();
   recount(); renderBase();
   if (S.seenCine) escolherSelo(dayIntro);
@@ -1658,6 +1776,7 @@ function dayIntro() {
   S.grupos = {}; S.queue = [];
   for (let i = 0; i < cfg.n + (S.filaExtra || 0); i++)
     S.queue.push(...(S.day >= 2 && i > 0 && chance(Math.min(.2 + S.day * .03, .4)) ? makeGrupo(S.day) : [makePerson(S.day)]));
+  if (S.day >= 4 && chance(.7)) S.queue.push(makeEncapuzado(S.day));
   S.filaExtra = 0;
   if (S.extraFila) { S.queue.unshift(Object.assign(S.extraFila, { fala: (INGLES ? "My brother said you'd let me in." : "Meu irmão disse que você ia me receber.") })); S.extraFila = null; }
   $("#julg").hidden = true; $(".hud").hidden = false;
@@ -1688,12 +1807,12 @@ function dayIntro() {
     : (INGLES ? `<p>The infection is harder to spot now. More people in the queue and less time per shift.</p>` : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`);
   openOv((INGLES ? `<span class="eyebrow">Day ${S.day} of ${DIAS} · ${S.queue.length} in the queue · cure at ${Math.round(S.pesquisa)}%</span>
     <h2>${S.day === 1 ? "First shift" : "Day " + S.day}</h2>${intro}${alerta}
-    ${S.day === 1 ? `<p>Zone 7 has <b>20 residents</b>, and each one eats one ration a day. People with a job keep the base running; people without one only consume. If the <b>wall</b> falls or fewer than <b>5 residents</b> are left, it's over.</p>
+    ${S.day === 1 ? `<p>Zone 7 has <b>20 residents</b>, and each one eats one ration a day. People with a job keep the base running, and each of them needs a helper without one. If the <b>wall</b> falls or fewer than <b>5 residents</b> are left, it's over.</p>
        <p>You have <b>${DIAS} days</b>. The lab needs to reach 100% on the cure, and that depends on <b>scientists and doctors staying alive</b>. At night, the residents gather and you judge what they bring you.</p>` : ""}
     ${rulesHTML()}
     <button class="btn main" id="go" type="button">Open the gate</button>` : `<span class="eyebrow">Dia ${S.day} de ${DIAS} · ${S.queue.length} na fila · cura em ${Math.round(S.pesquisa)}%</span>
     <h2>${S.day === 1 ? "Primeiro turno" : "Dia " + S.day}</h2>${intro}${alerta}
-    ${S.day === 1 ? `<p>A Zona 7 tem <b>20 moradores</b>, e cada um come uma ração por dia. Quem tem profissão sustenta a base; quem não tem só consome. Se o <b>muro</b> cair ou sobrarem <b>menos de 5 moradores</b>, acabou.</p>
+    ${S.day === 1 ? `<p>A Zona 7 tem <b>20 moradores</b>, e cada um come uma ração por dia. Quem tem profissão sustenta a base, e cada um precisa de um ajudante sem profissão. Se o <b>muro</b> cair ou sobrarem <b>menos de 5 moradores</b>, acabou.</p>
        <p>Você tem <b>${DIAS} dias</b>. O laboratório precisa chegar a 100% da cura, e isso depende de <b>cientistas e médicos vivos</b>. À noite, os moradores se reúnem e você julga o que eles trazem.</p>` : ""}
     ${rulesHTML()}
     <button class="btn main" id="go" type="button">Abrir o portão</button>`));
@@ -1847,9 +1966,9 @@ function renderBase() {
     const v = Math.max(0, Math.round(S.base[k]));
     return (INGLES ? `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
       <div class="meter"><i class="${cls(v)}" style="width:${v}%"></i></div>
-      <div class="base-sub">${S.workers[k]} ${S.workers[k] === 1 ? "person" : "people"}</div></div>` : `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
+      <div class="base-sub${S.ajud[k] < S.workers[k] ? " falta" : ""}">${S.workers[k]}+${S.ajud[k]} help</div></div>` : `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
       <div class="meter"><i class="${cls(v)}" style="width:${v}%"></i></div>
-      <div class="base-sub">${S.workers[k]} ${S.workers[k] === 1 ? "pessoa" : "pessoas"}</div></div>`);
+      <div class="base-sub${S.ajud[k] < S.workers[k] ? " falta" : ""}">${S.workers[k]}+${S.ajud[k]} aj.</div></div>`);
   }).join("");
   box.innerHTML = html;
 }
@@ -1857,7 +1976,7 @@ function renderBase() {
 function runBase() {
   const rows = [], eventos = [], mortes = [];
   for (const k in BASE) {
-    const antes = S.base[k], q = BASE[k].queda(S.day), p = S.workers[k] * BASE[k].prod;
+    const antes = S.base[k], q = BASE[k].queda(S.day), p = Math.round(S.efetivo[k] * BASE[k].prod);
     S.base[k] = k === "comida" ? antes + p - q : Math.max(0, Math.min(100, antes + p - q));
     rows.push({ k, antes, depois: S.base[k], q, p });
   }
@@ -1887,12 +2006,15 @@ function runBase() {
   S.blackout = S.base.energia <= 0;
   if (S.blackout) eventos.push((INGLES ? "No power: the floodlights went out. Tomorrow you can't examine arms or necks, and the flashlight won't recharge." : "Sem energia: os refletores apagaram. Amanhã não dá para examinar braços nem pescoço, e a lanterna não recarrega."));
   for (const r of rows) if (r.k !== "comida" && r.depois > 0 && r.depois < 25) eventos.push((INGLES ? `${BASE[r.k].nome} is at ${Math.round(r.depois)}. You need ${({ muro: "a blacksmith or welder", saude: "a doctor or nurse", energia: "an electrician or mechanic" })[r.k]}.` : `${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`));
+  const semAjuda = Object.keys(S.workers).reduce((a, k) => a + S.workers[k] - S.ajud[k], 0);
+  if (semAjuda) eventos.push(TX(`Faltam ajudantes: ${semAjuda} ${semAjuda === 1 ? "profissional trabalhou" : "profissionais trabalharam"} pela metade. Adultos sem profissão fazem o trabalho pesado.`, `Not enough helpers: ${semAjuda} ${semAjuda === 1 ? "worker" : "workers"} produced only half. Adults without a job do the heavy lifting.`));
   const c = consumoTotal();
   if (S.base.comida < c * 2) eventos.push((INGLES ? `Food for less than 2 days (${Math.floor(S.base.comida)} rations for ${S.moradores.length} residents). You need a farmer or cook, or fewer mouths.` : `Comida para menos de 2 dias (${Math.floor(S.base.comida)} rações para ${S.moradores.length} moradores). Precisa de agricultor ou cozinheiro, ou de menos bocas.`));
   renderBase();
   const html = `<div class="report">${rows.map(r => {
     const d = Math.round(r.depois - r.antes);
-    const det = r.k === "comida" ? (INGLES ? `${S.workers.comida} workers produce +${r.p} · consumption −${Math.round(r.q * 10) / 10}` : `${S.workers.comida} trab. produzem +${r.p} · consumo −${fmtN(Math.round(r.q * 10) / 10)}`) : (INGLES ? `${S.workers[r.k]} workers produce +${r.p} · wear −${r.q}` : `${S.workers[r.k]} trab. produzem +${r.p} · desgaste −${r.q}`);
+    const eq = INGLES ? `${S.workers[r.k]} workers + ${S.ajud[r.k]} helpers produce +${r.p}` : `${S.workers[r.k]} trab. + ${S.ajud[r.k]} ajud. produzem +${r.p}`;
+    const det = r.k === "comida" ? (INGLES ? `${eq} · consumption −${Math.round(r.q * 10) / 10}` : `${eq} · consumo −${fmtN(Math.round(r.q * 10) / 10)}`) : (INGLES ? `${eq} · wear −${r.q}` : `${eq} · desgaste −${r.q}`);
     return `<div class="r"><span>${BASE[r.k].nome}<small>${det}</small></span>
       <span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d > 0 ? "+" : ""}${d}</span><b>${Math.max(0, Math.round(r.depois))}</b></div>`;
   }).join("")}</div>${mortes.map(e => `<div class="evento">${e}</div>`).join("")}${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
@@ -2083,9 +2205,11 @@ function abrirRegistro(voltar, ordem = "funcao") {
     li.append(miniRetrato(m, 40));
     const info = document.createElement("div");
     const funcao = m.role ? `<span class="tag on">${ROLE(m.role).nome}</span>` : (INGLES ? `<span class="tag">no role</span>` : `<span class="tag">sem função</span>`);
-    const est = m.estado === (INGLES ? "healthy" : "saudável") ? "" : `<span class="tag bad">${m.estado}</span>`;
+    const est = (m.estado === (INGLES ? "healthy" : "saudável") ? "" : `<span class="tag bad">${m.estado}</span>`)
+      + (m.guarda ? `<span class="tag on">${TX("guarda", "guard")}</span>` : "") + (aliado(m) ? `<span class="tag bad">${TX("família no acampamento", "family in the camp")}</span>` : "");
     info.innerHTML = (INGLES ? `<div class="nm">${m.nome}</div><div class="dt">${m.idade} years · ${m.oficio} · ${m.dias} ${m.dias === 1 ? "day" : "days"} in the base</div><div>${funcao}${est}</div>` : `<div class="nm">${m.nome}</div><div class="dt">${m.idade} anos · ${m.oficio} · ${m.dias} ${m.dias === 1 ? "dia" : "dias"} na base</div><div>${funcao}${est}</div>`);
     li.append(info);
+    if (m.guarda) { const d = document.createElement("button"); d.type = "button"; d.className = "x"; d.textContent = TX("Desarmar", "Disarm"); d.onclick = () => desarmar(m, () => abrirRegistro(voltar, ordem)); li.append(d); }
     const b = document.createElement("button"); b.type = "button"; b.className = "x"; b.textContent = (INGLES ? "Expel" : "Expulsar");
     b.disabled = !podeExpulsar;
     b.onclick = () => confirmarExpulsao(m, () => abrirRegistro(voltar, ordem));
@@ -2097,7 +2221,10 @@ function abrirRegistro(voltar, ordem = "funcao") {
 }
 function confirmarExpulsao(m, voltar) {
   const mesmos = m.role ? S.workers[m.role] : 0;
-  const impacto = [(INGLES ? `Food: consumption drops ${consumo(m) === 1 ? "1 ration" : "half a ration"} per day` : `Comida: consumo cai ${consumo(m) === 1 ? "1 ração" : "meia ração"} por dia`)];
+  const impacto = [TX(`Comida: consumo cai ${fmtN(consumo(m))} ${consumo(m) === 1 ? "ração" : "rações"} por dia`, `Food: consumption drops ${fmtN(consumo(m))} ${consumo(m) === 1 ? "ration" : "rations"} per day`)];
+  const profs = Object.values(S.workers).reduce((a, b) => a + b, 0);
+  if (!m.role && !fragil(m) && ativo(m) && S.ajudantes <= profs) impacto.push(TX("Um profissional perde o ajudante e passa a produzir metade", "A skilled worker loses their helper and produces half"));
+  impacto.push(TX("Vai para o acampamento da resistência, lá fora", "Joins the resistance camp outside"));
   if (m.role) impacto.push(mesmos <= 1 ? (INGLES ? `<b>The base is left with no one on ${ROLE(m.role).nome.toLowerCase()}</b>` : `<b>A base fica sem ninguém em ${ROLE(m.role).nome.toLowerCase()}</b>`) : (INGLES ? `${ROLE(m.role).nome}: from ${mesmos} to ${mesmos - 1} ${mesmos - 1 === 1 ? "person" : "people"} working` : `${ROLE(m.role).nome}: de ${mesmos} para ${mesmos - 1} ${mesmos - 1 === 1 ? "pessoa" : "pessoas"} trabalhando`));
   impacto.push((INGLES ? `Residents: ${S.moradores.length} → ${S.moradores.length - 1}` : `Moradores: ${S.moradores.length} → ${S.moradores.length - 1}`));
   if (m.crianca) impacto.push((INGLES ? "A child alone on the road won't survive long" : "Uma criança sozinha na estrada não sobrevive muito tempo"));
@@ -2115,7 +2242,7 @@ function confirmarExpulsao(m, voltar) {
   $("#nao").onclick = voltar;
   $("#go").onclick = () => {
     S.moradores.splice(S.moradores.indexOf(m), 1);
-    S.expulsos.push({ nome: m.nome, dia: S.day });
+    registrarExpulso(m);
     if (m.crianca) fac(-15, 2, (INGLES ? "Child expelled" : "Criança expulsa")); else if (m.role) fac(-4, -6, (INGLES ? "Worker expelled" : "Trabalhador expulso"));
     else if (m.idade > 64) fac(-10, 5, (INGLES ? "Elder expelled" : "Idoso expulso")); else fac(-6, 5, (INGLES ? "Expulsion" : "Expulsão"));
     recount(); renderBase(); if (S.phase === "julg-fim") renderFac();
@@ -2227,6 +2354,7 @@ $("#bManual").onclick = () => {
     <p>Each job sustains part of the base: wall (blacksmith, welder), food (farmer, cook), health (doctor, nurse), power (electrician, mechanic). Every day the wall and the supplies wear down.</p>
     <p>At the gate, the conversation can give hints, but only the exam confirms. An infected person who gets through hides among the residents and spreads the disease. Eliminating a healthy person costs 150 points and a strike.</p>
     <p>Refusing (at the gate or in screening) costs no strike, but you never find out if the person was sick. Groups and families are screened one at a time: splitting up a family has consequences at night. Children and the elderly eat 1.5 rations.</p>
+    <p>Each skilled worker needs a helper with no job, or produces half. Whoever you turn away or expel joins the resistance camp outside; with family inside, they may break in. Hooded figures accept no exam: decide by the conversation.</p>
     <p>At night: accusations may be just fear. Examining irritates the room, isolating holds the person for 2 nights, defending pleases the Humanists, executing pleases the Pragmatists. A faction at zero means mutiny. The cure needs 100% by day ${DIAS}.</p>
     <p>Agitation at the max: the infected attack (shoot fast) and the healthy scream, draw zombies and die at the gate, damaging the wall.</p>
     <p class="info">Keyboard shortcuts: 1 to 5 for exams, E to eliminate, R to refuse, S to let in.</p>
@@ -2234,6 +2362,7 @@ $("#bManual").onclick = () => {
     <p>Cada profissão sustenta uma parte da base: muro (ferreiro, soldador), comida (agricultor, cozinheiro), saúde (médico, enfermeiro), energia (eletricista, mecânico). Todo dia o muro e os estoques se desgastam.</p>
     <p>No portão, a conversa pode dar pistas, mas só o exame confirma. Um infectado que passa se esconde entre os moradores e espalha a doença. Eliminar um saudável custa 150 pontos e um erro.</p>
     <p>Recusar (no portão ou na triagem) não conta erro, mas você nunca sabe se a pessoa estava doente. Grupos e famílias passam pela triagem um por um: separar uma família tem consequências à noite. Crianças e idosos comem 1,5 ração.</p>
+    <p>Cada profissional precisa de um ajudante sem profissão, ou produz metade. Quem você recusa ou expulsa vai para o acampamento da resistência; com família aqui dentro, eles podem invadir. Encapuzados não aceitam exame: decida pela conversa.</p>
     <p>À noite: acusações podem ser só medo. Examinar irrita a sala, isolar segura a pessoa por 2 noites, defender agrada os Humanistas, executar agrada os Pragmáticos. Facção em zero é motim. A cura precisa de 100% até o dia ${DIAS}.</p>
     <p>Agitação no máximo: o infectado ataca (atire rápido) e o saudável grita, atrai zumbis e morre no portão, danificando o muro.</p>
     <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, R para recusar, S para salvar.</p>
@@ -2254,7 +2383,7 @@ document.addEventListener("keydown", e => {
   if (!$("#ov").hidden) return;
   const k = e.key.toLowerCase();
   if (S.phase === "cine") { if (k === "enter" || k === " ") { e.preventDefault(); cineTap(); } else if (k === "escape") cineEnd(); return; }
-  if (S.phase === "gate") { if (k === "enter" || k === " ") { e.preventDefault(); gateTap(); } else if (k === "t") toExam(); return; }
+  if (S.phase === "gate") { if (k === "enter" || k === " ") { e.preventDefault(); gateTap(); } else if (k === "t" && !(S.cur && S.cur.encap)) toExam(); return; }
   if (S.phase === "julg") { if (k === "enter" || k === " ") { e.preventDefault(); jTap(); } return; }
   if (k >= "1" && k <= "5") useTool(TOOLS[+k - 1].id);
   else if (k === "e") decide(false);
@@ -2286,7 +2415,7 @@ function renderFac() {
 // ---------- Pesquisa da cura ----------
 const DIAS = 10;
 function ritmoPesquisa() {
-  let d = 1 + (S.workers.pesquisa || 0) * 6 + (S.workers.saude || 0) * 2;
+  let d = Math.round(1 + (S.efetivo.pesquisa || 0) * 6 + (S.efetivo.saude || 0) * 2);
   if (S.base.energia <= 0 || S.base.saude < 20) d = Math.floor(d / 2);
   return d;
 }
@@ -2297,9 +2426,34 @@ const umAdulto = (excl = []) => pick(livres(excl).filter(m => !m.crianca)) || pi
 function addRes(k, v) { S.base[k] = k === "comida" ? Math.max(0, S.base[k] + v) : Math.max(0, Math.min(100, S.base[k] + v)); }
 function tirarMorador(m) { const i = S.moradores.indexOf(m); if (i >= 0) S.moradores.splice(i, 1); recount(); }
 const ela = m => m.fem ? "a" : "o";
+// Quem é expulso ou recusado vai para o acampamento lá fora. Aliado é quem tem família lá.
+function registrarExpulso(m) { S.expulsos.push({ nome: m.nome, dia: S.day }); (S.acamp = S.acamp || []).push({ nome: m.nome, dia: S.day }); }
+const aliado = m => !!(m.separadoDe && m.separadoDe.some(x => !x.morto));
 
 // Casos comuns da noite (reclamações e pedidos). Cada um sorteia os moradores envolvidos.
+function armar(c) {
+  c.guarda = true; c.traidor = chance(aliado(c) ? .55 : .15); recount();
+  if (S.estilo) S.estilo.armou = (S.estilo.armou || 0) + 1;
+  return TX(`${c.nome} recebe uma arma e o turno da noite no portão. Metade da sala dorme mais tranquila. A outra metade, não.`, `${c.nome} gets a gun and the night shift at the gate. Half the room sleeps easier. The other half doesn't.`);
+}
+function desarmar(m, depois) {
+  m.guarda = false;
+  if (!m.traidor) fac(0, -3, TX("Guarda desarmado", "Guard disarmed"));
+  m.traidor = false; recount(); renderBase();
+  toast(TX(`${m.nome} entregou a arma.`, `${m.nome} handed over the gun.`), "");
+  depois();
+}
 const CASOS = [
+  { id: "guarda", cond: () => !S.moradores.some(m => m.guarda) && (S.acamp || []).length >= 2 && livres().filter(m => !m.crianca && m.idade <= 64 && !m.encap).length >= 3, make: () => {
+    const cand = shuffle(livres().filter(m => !m.crianca && m.idade <= 64 && !m.encap)).slice(0, 3);
+    const quem = pick(S.moradores.filter(m => m.role === "muro" && !cand.includes(m))) || umAdulto(cand);
+    const saud = TX("saudável", "healthy");
+    return { titulo: TX("O guarda do portão", "The gate guard"), quem,
+      falas: [[quem, TX(`As fogueiras do acampamento estão cada vez mais perto. ${S.acamp.length} pessoas lá fora, e todas têm motivo para odiar a gente.`, `The camp's fires keep getting closer. ${S.acamp.length} people out there, and every one of them has a reason to hate us.`)],
+        [quem, TX("Precisamos de alguém armado no portão, toda noite.", "We need someone armed at the gate, every night.")]],
+      opts: [...cand.map(c => ({ t: TX(`Armar ${primeiro(c)}`, `Arm ${primeiro(c)}`) + (c.estado !== saud ? ` (${c.estado})` : ""), h: -4, p: 3, fx: () => armar(c) })),
+        { t: TX("Ninguém fica armado", "Nobody gets a gun"), h: 2, p: -3, fx: () => TX("O portão fica só com o cadeado. E com sorte.", "The gate is left with just the padlock. And luck.") }] };
+  } },
   { id: "separados", cond: () => S.moradores.some(m => m.separadoDe && !m.casoSep && !m.isolado), make: () => {
     S.usados = S.usados.filter(x => x !== "separados"); // pode voltar em outra noite, com outra pessoa
     const m = pick(S.moradores.filter(x => x.separadoDe && !x.casoSep && !x.isolado)); m.casoSep = true;
@@ -2329,7 +2483,7 @@ const CASOS = [
       { t: (INGLES ? "Refuse" : "Recusar"), h: -5, p: 3, fx: () => (INGLES ? `${a.nome} doesn't speak to anyone for the rest of the night.` : `${a.nome} não fala com mais ninguém pelo resto da noite.`) }] }; } },
   { id: "roubo", cond: () => livres().length >= 4, make: () => { const l = umAdulto(), t = umAdulto([l]); return { titulo: (INGLES ? "The theft" : "O roubo"), quem: t, alvo: l,
     falas: [[t, (INGLES ? `I caught ${l.nome} hiding rations under the mattress.` : `Peguei ${l.nome} escondendo rações debaixo do colchão.`)], [l, (INGLES ? "It was for my family! You don't know what it's like to watch someone starve." : "Era pra minha família! Vocês não sabem o que é ver alguém passar fome.")]],
-    opts: [{ t: (INGLES ? `Expel ${l.nome.split(" ")[0]}` : `Expulsar ${l.nome.split(" ")[0]}`), h: -5, p: 6, fx: () => { tirarMorador(l); S.expulsos.push({ nome: l.nome, dia: S.day }); return (INGLES ? `${l.nome} was put out before dawn.` : `${l.nome} foi posto para fora antes do amanhecer.`); } },
+    opts: [{ t: (INGLES ? `Expel ${l.nome.split(" ")[0]}` : `Expulsar ${l.nome.split(" ")[0]}`), h: -5, p: 6, fx: () => { tirarMorador(l); registrarExpulso(l); return (INGLES ? `${l.nome} was put out before dawn.` : `${l.nome} foi posto para fora antes do amanhecer.`); } },
       { t: (INGLES ? "Cut the thief's ration" : "Cortar a ração de quem roubou"), h: -1, p: 3, fx: () => { l.estado = (INGLES ? "weak from hunger" : "fraco de fome"); return (INGLES ? `${l.nome} will spend the next few days on half rations.` : `${l.nome} vai passar os próximos dias com meia ração.`); } },
       { t: (INGLES ? "Forgive" : "Perdoar"), h: 5, p: -6, fx: () => { addRes("comida", -5); return (INGLES ? "You forgive them. The hidden rations were already eaten: −5 food." : "Você perdoa. As rações escondidas já foram comidas: −5 de comida."); } }] }; } },
   { id: "muro", cond: () => S.workers.muro >= 1 && S.base.muro < 70, make: () => { const a = pick(S.moradores.filter(m => m.role === "muro")) || umAdulto(); return { titulo: (INGLES ? "The north wall" : "O muro norte"), quem: a,
@@ -2376,7 +2530,7 @@ const CASOS = [
     falas: [[a, (INGLES ? "Some people here do nothing but eat. Send two of them away. Today." : "Tem gente aqui que não faz nada além de comer. Manda dois embora. Hoje.")], [null, (INGLES ? "The Pragmatists pound the table. The Humanists stand up." : "Os Pragmáticos batem na mesa. Os Humanistas se levantam.")]],
     opts: [{ t: (INGLES ? "Expel two with no role" : "Expulsar dois sem função"), h: -14, p: 12, fx: () => {
         const alvos = S.moradores.filter(m => !m.role && !m.crianca).sort((x, y) => y.idade - x.idade).slice(0, 2);
-        alvos.forEach(m => { tirarMorador(m); S.expulsos.push({ nome: m.nome, dia: S.day }); });
+        alvos.forEach(m => { tirarMorador(m); registrarExpulso(m); });
         return (INGLES ? `${alvos.map(m => m.nome).join(" and ")} walk out the gate into the dark.` : `${alvos.map(m => m.nome).join(" e ")} saem pelo portão no escuro.`); } },
       { t: (INGLES ? "Nobody leaves" : "Ninguém sai"), h: 4, p: -8, fx: () => (INGLES ? "The meeting ends in shouting." : "A reunião acaba em gritaria.") }] }; } },
   { id: "fila", make: () => { const a = umAdulto(); return { titulo: (INGLES ? "The ones outside" : "Os de fora"), quem: a,
@@ -2398,7 +2552,7 @@ const CASOS = [
     falas: [[d, (INGLES ? `${a.nome} has a pistol hidden in the mattress. I saw it.` : `${a.nome} tem uma pistola escondida no colchão. Eu vi.`)], [a, (INGLES ? "It's to protect my family. From you, if I have to." : "É para proteger a minha família. De vocês, se precisar.")]],
     opts: [{ t: (INGLES ? "Confiscate the gun" : "Confiscar a arma"), h: -1, p: 4, fx: () => (INGLES ? `The pistol goes to the inspector's post. ${a.nome} won't look at you anymore.` : `A pistola vai para o posto do fiscal. ${a.nome} não olha mais para você.`) },
       { t: (INGLES ? "Let them keep it" : "Deixar com a pessoa"), h: 2, p: -4, fx: () => (INGLES ? "The gun stays. Half the room starts sleeping with one eye open." : "A arma fica. Metade da sala passa a dormir com um olho aberto.") },
-      { t: (INGLES ? `Expel ${a.nome.split(" ")[0]}` : `Expulsar ${a.nome.split(" ")[0]}`), h: -4, p: 3, fx: () => { tirarMorador(a); S.expulsos.push({ nome: a.nome, dia: S.day }); return (INGLES ? `${a.nome} walks out the gate. Without the gun.` : `${a.nome} sai pelo portão. Sem a arma.`); } }] }; } },
+      { t: (INGLES ? `Expel ${a.nome.split(" ")[0]}` : `Expulsar ${a.nome.split(" ")[0]}`), h: -4, p: 3, fx: () => { tirarMorador(a); registrarExpulso(a); return (INGLES ? `${a.nome} walks out the gate. Without the gun.` : `${a.nome} sai pelo portão. Sem a arma.`); } }] }; } },
   { id: "cobaia", cond: () => (S.workers.pesquisa || 0) >= 1 && S.moradores.some(m => !m.role && !m.crianca), make: () => { const c = pick(S.moradores.filter(m => m.role === "pesquisa")), v = pick(livres([c]).filter(m => !m.role && !m.crianca)); return c && v && { titulo: (INGLES ? "The test subject" : "A cobaia"), quem: c, alvo: v,
     falas: [[c, (INGLES ? "I have an experimental vaccine. I need to test it on someone." : "Eu tenho uma vacina experimental. Preciso testar em alguém.")], [v, (INGLES ? "I volunteer. At least that way I'm good for something." : "Eu me ofereço. Pelo menos assim eu sirvo para alguma coisa.")]],
     opts: [{ t: (INGLES ? "Authorize the test" : "Autorizar o teste"), h: -2, p: 3, fx: () => {
@@ -2447,13 +2601,69 @@ const CASOS = [
 // ---------- Infectado escondido ----------
 const SINT_REAL = [(INGLES ? "coughing nonstop" : "tossindo sem parar"), (INGLES ? "with yellowed eyes" : "com os olhos amarelados"), (INGLES ? "burning with fever" : "ardendo em febre"), (INGLES ? "in a cold sweat and shaking" : "suando frio e tremendo")];
 const SINT_FALSO = [(INGLES ? "coughing all night" : "tossindo a noite inteira"), (INGLES ? "with red eyes" : "com os olhos vermelhos"), (INGLES ? "with a fever" : "com febre"), (INGLES ? "sneezing nonstop" : "espirrando sem parar"), (INGLES ? "in a cold sweat" : "suando frio")];
+function noiteEventos() {
+  const ev = [];
+  S.acamp = S.acamp || [];
+  S.moradores.filter(m => m.encap).forEach(m => {
+    const e = m.encap; e.noites = (e.noites || 0) + 1;
+    if (e.tipo === "ladrao" && e.noites === 1) {
+      tirarMorador(m);
+      const val = k => k === "comida" ? S.base.comida : S.base[k];
+      const k = ["comida", "muro", "saude", "energia"].filter(x => x !== e.oferta).sort((a, b) => val(b) - val(a))[0];
+      addRes(k, -25);
+      ev.push(TX(`O encapuzado sumiu pelo muro de madrugada, levando o que conseguiu carregar: ${BASE[k].nome} −25.`, `The hooded figure slipped over the wall before dawn, taking all they could carry: ${BASE[k].nome} −25.`));
+    } else if (e.tipo === "informante" && e.noites === 1) {
+      tirarMorador(m); S.acampInfo = true; S.acamp.push({ nome: TX("um encapuzado", "a hooded figure"), dia: S.day });
+      ev.push(TX("O encapuzado foi embora antes do amanhecer. Ninguém viu para onde.", "The hooded figure left before dawn. Nobody saw where they went."));
+    } else if (e.tipo === "normal" && e.noites >= 3) {
+      Object.assign(m, { nome: e.nome, oficio: e.oficio, role: e.role, pele: e.pele, estilo: e.estilo }); delete m.encap;
+      ev.push(TX(`O encapuzado tirou o capuz. É ${m.nome}, ${m.oficio}. Ficou porque você confiou.`, `The hooded figure took off the hood. It's ${m.nome}, ${AN(m.oficio)}. They stayed because you trusted them.`));
+    }
+  });
+  if (S.day >= 3 && S.acamp.length >= 3) {
+    const al = S.moradores.filter(aliado).length, info = S.acampInfo;
+    const chanceInv = al || info ? Math.min(.6, .05 + S.acamp.length * .03 + al * .08 + (info ? .25 : 0)) : Math.min(.08, S.acamp.length * .01);
+    if (chance(chanceInv)) ev.push(...invasao());
+  }
+  if (S.acamp.length) ev.push(TX(`Fogueiras na estrada: ${S.acamp.length} ${S.acamp.length === 1 ? "pessoa" : "pessoas"} no acampamento da resistência.`, `Campfires on the road: ${S.acamp.length} ${S.acamp.length === 1 ? "person" : "people"} in the resistance camp.`));
+  recount();
+  return ev;
+}
+function invasao() {
+  const ev = [], g = S.moradores.find(m => m.guarda), forte = S.acampInfo;
+  const morre = (v, causa) => { tirarMorador(v); S.mortosBase.push({ nome: v.nome, causa, dia: S.day }); };
+  const dano = (mu, co, n) => {
+    addRes("muro", -mu); addRes("comida", -co);
+    for (let i = 0; i < n; i++) { const v = pick(livres().filter(x => !x.guarda)); if (!v) break; morre(v, TX("a invasão", "the raid")); ev.push(TX(`${v.nome} morreu na invasão.`, `${v.nome} died in the raid.`)); }
+    ev.push(TX(`Muro −${mu}, comida −${co}.`, `Wall −${mu}, food −${co}.`));
+  };
+  if (forte) ev.push(TX("Eles sabiam exatamente onde atacar. Alguém contou.", "They knew exactly where to strike. Someone told them."));
+  if (g && g.traidor) {
+    ev.push(TX(`De madrugada, ${g.nome} abriu o portão para o acampamento e fugiu com eles.`, `In the dead of night, ${g.nome} opened the gate for the camp and ran off with them.`));
+    tirarMorador(g); S.acamp.push({ nome: g.nome, dia: S.day });
+    dano(25, 25, 2); fac(-4, -6, TX("Guarda traidor", "Traitor guard"));
+  } else if (g && !(forte && chance(.5))) {
+    ev.push(TX(`O acampamento tentou invadir. ${g.nome} segurou o portão a tiros.`, `The camp tried to break in. ${g.nome} held the gate with gunfire.`));
+    addRes("muro", -5);
+    if (chance(.5)) { morre(g, TX("defendendo o portão", "defending the gate")); ev.push(TX(`${g.nome} morreu defendendo o portão.`, `${g.nome} died defending the gate.`)); }
+    fac(1, 4, TX("Invasão repelida", "Raid repelled"));
+  } else {
+    if (g) { morre(g, TX("a invasão", "the raid")); ev.push(TX(`Eles foram direto em ${g.nome}. O guarda caiu antes do primeiro tiro.`, `They went straight for ${g.nome}. The guard fell before firing a shot.`)); }
+    ev.push(TX("O acampamento invadiu a Zona 7 durante a noite.", "The camp broke into Zone 7 during the night."));
+    forte ? dano(25, 25, 2) : dano(15, 15, 1);
+    fac(-3, -3, TX("Invasão", "Raid"));
+  }
+  S.acampInfo = false;
+  S.acamp = S.acamp.slice(Math.ceil(S.acamp.length / 2)); // metade morre ou se dispersa
+  return ev;
+}
 function progressoInfeccao() {
   const ev = [];
   S.moradores.forEach(m => { if (m.ferido) m.ferido--; });
   const inf = S.moradores.filter(m => m.infected);
   inf.forEach(m => { m.inc = (m.inc || 0) + 1; if (!m.sintomaReal) m.sintomaReal = pick(SINT_REAL); });
   inf.forEach(m => {
-    if (m.isolado || !chance(.3)) return;
+    if (m.isolado || !chance(.4)) return;
     const v = pick(S.moradores.filter(x => !x.infected && !x.isolado));
     if (v) Object.assign(v, { infected: true, inc: 0 });
   });
@@ -2547,7 +2757,7 @@ function montarCasos(ev) {
   if (ev.length) c.push({ titulo: (INGLES ? "News of the night" : "Notícias da noite"), falas: ev.map(e => [null, e, (INGLES ? "Guard" : "Vigia")]), opts: [] });
   const maxAc = S.day <= 3 ? 1 : 2;
   let ac = 0;
-  const doentes = shuffle(S.moradores.filter(m => m.infected && m.inc >= 1 && !m.isolado));
+  const doentes = shuffle(S.moradores.filter(m => m.infected && m.inc >= 2 && !m.isolado)); // o sintoma só aparece na 2ª noite
   if (doentes.length && chance(.75)) { c.push(casoAcusacao(doentes[0], true)); ac++; }
   if (ac < maxAc && chance(ac ? .35 : .6)) {
     const h = pick(S.moradores.filter(m => !m.infected && !m.isolado && !c.some(x => x.alvo === m)));
@@ -2568,7 +2778,7 @@ function iniciarNoite() {
   S.phase = "julg";
   $("#gate").hidden = true; $("#mesa").hidden = true; $(".hud").hidden = true; $("#julg").hidden = false;
   S.night = { fac0: { ...S.fac }, pesq0: S.pesquisa, ci: -1 };
-  const ev = progressoInfeccao();
+  const ev = [...noiteEventos(), ...progressoInfeccao()];
   S.night.casos = montarCasos(ev);
   recount(); renderBase(); renderFac();
   sfx(220, 1.5, "triangle", .04, { to: 196, atk: .4, rel: .8 });
@@ -2748,7 +2958,7 @@ function finalDoJogo() {
 // ---------- Progresso salvo ----------
 const SAVE_KEY = "zq-save-v2" + (INGLES ? "-en" : "");
 const SAVE_CAMPOS = ["day", "score", "strikes", "streak", "base", "moradores", "fac", "pesquisa", "bat", "batCharge", "blackout", "gerador3",
-  "mortosBase", "expulsos", "execs", "execInocentes", "culpa", "extraFila", "filaExtra", "racao", "usados", "tutDone", "selo", "estilo"];
+  "mortosBase", "expulsos", "execs", "execInocentes", "culpa", "extraFila", "filaExtra", "racao", "usados", "tutDone", "selo", "estilo", "acamp", "acampInfo"];
 function salvar() { try { const o = {}; SAVE_CAMPOS.forEach(k => o[k] = S[k]); localStorage.setItem(SAVE_KEY, JSON.stringify(o)); } catch (e) {} }
 function carregarSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return null; } }
 function limparSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
@@ -2762,7 +2972,7 @@ function oferecerContinuar(sv) {
     <div class="btn-row"><button class="btn ghost" id="novo" type="button">Novo jogo</button><button class="btn main" id="go" type="button">Continuar</button></div>`));
   $("#go").onclick = () => {
     closeOv(); Object.assign(S, sv, { seenCine: true, facLog: [] });
-    S.selo = sv.selo || null; S.estilo = Object.assign(novoEstilo(), sv.estilo || {});
+    S.selo = sv.selo || null; S.estilo = Object.assign(novoEstilo(), sv.estilo || {}); S.acamp = sv.acamp || []; S.acampInfo = !!sv.acampInfo;
     S.tutDone = sv.tutDone || {};
     recount(); renderBase(); dayIntro();
   };
@@ -2774,7 +2984,7 @@ const TUT = { steps: [], i: 0 };
 const TUT_DIA1 = [
   { el: "#dlg", txt: (INGLES ? "This is the <b>gate</b>. Every survivor will try to convince you to let them in. The conversation can give hints, but it proves nothing." : "Este é o <b>portão</b>. Cada sobrevivente vai tentar te convencer a deixar entrar. A conversa pode dar pistas, mas não prova nada.") },
   { el: "#choices", txt: (INGLES ? "You can ask questions. Whenever you're ready, tap <b>Take to screening</b>." : "Você pode fazer perguntas. Quando quiser, toque em <b>Levar para a triagem</b>."), wait: "triagem" },
-  { el: "#base", txt: (INGLES ? "This is the <b>base</b>: 20 residents. Each one eats <b>1 ration a day</b> (children and the elderly, 1.5). Skilled people you save restore a resource: blacksmiths the wall, farmers the food, doctors the health, electricians the power. <b>People with no role only eat.</b> If the wall hits zero or fewer than 5 residents are left, the base falls." : "Esta é a <b>base</b>: 20 moradores. Cada um come <b>1 ração por dia</b> (crianças e idosos, 1,5). Quem você salva com profissão repõe um recurso: ferreiro o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Quem não tem profissão só come.</b> Muro em zero ou menos de 5 moradores, e a base cai.") },
+  { el: "#base", txt: (INGLES ? "This is the <b>base</b>: 20 residents. Each one eats <b>1 ration a day</b> (children and the elderly, 1.5). Skilled people you save restore a resource: blacksmiths the wall, farmers the food, doctors the health, electricians the power. Each skilled worker needs <b>a helper with no job</b>, or produces half. Children and the elderly can't help. If the wall hits zero or fewer than 5 residents are left, the base falls." : "Esta é a <b>base</b>: 20 moradores. Cada um come <b>1 ração por dia</b> (crianças e idosos, 1,5). Quem você salva com profissão repõe um recurso: ferreiro o muro, agricultor a comida, médico a saúde, eletricista a energia. Cada profissional precisa de <b>um ajudante sem profissão</b>, ou produz metade. Crianças e idosos não ajudam. Muro em zero ou menos de 5 moradores, e a base cai.") },
   { el: "#pRole", txt: (INGLES ? "Here you see the person's <b>job</b> and what they'd do for the base. Killing someone with a job costs dearly too." : "Aqui aparece a <b>profissão</b> da pessoa e o que ela faria pela base. Matar quem tem profissão também custa caro.") },
   { el: ".agit", txt: (INGLES ? "<b>Agitation</b> rises while you take your time. At the max, the infected attack and the healthy panic, scream and draw the zombies. It takes 15 seconds to fill. It's paused while you read." : "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Ela leva 15 segundos para encher. Está pausada enquanto você lê.") },
   { el: '.tool[data-id="temp"]', txt: (INGLES ? "Start with the <b>thermometer</b>. Tap it." : "Comece pelo <b>termômetro</b>. Toque nele."), wait: "tool:temp" },
@@ -2918,7 +3128,7 @@ function loop() {
   setTimeout(fim, 3500);
   if (location.hash === "#debug") fim();
 })();
-if (location.hash === "#debug") window.__zq = { S, makePerson, makeGrupo, pontosSelo, seloReal, fecharGrupo, gameOver, finalDoJogo, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais, casoAcusacao, proximoCaso };
+if (location.hash === "#debug") window.__zq = { S, makePerson, makeGrupo, pontosSelo, seloReal, fecharGrupo, gameOver, finalDoJogo, makeEncapuzado, noiteEventos, invasao, armar, desarmar, aliado, abrirRegistro, MUS, ctx: () => actx, recount, salvar, carregarSave, limparSave, CASOS, moradoresIniciais, casoAcusacao, proximoCaso };
 renderTools(); renderFicha(); renderHUD();
 startGame(true);
 requestAnimationFrame(loop);

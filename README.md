@@ -10,6 +10,10 @@ Jogo de triagem em pixel art feito pela **Valtore**. Você é o fiscal do Portã
 - **Grupos e famílias:** casais, pais com filhos e avós com netos chegam juntos. Cada um passa pela triagem, e separar uma família tem consequência à noite.
 - **Recusar:** dá para mandar alguém embora no portão, sem exame, ou depois da triagem. Não conta erro, mas a base perde quem poderia ajudar.
 - Crianças e idosos comem 1,5 ração por dia. O gerador entra em colapso no dia 5.
+- **Mão de obra:** cada profissional precisa de um ajudante adulto sem profissão; sem ajudante, produz metade.
+- **Acampamento da resistência:** quem você recusa ou expulsa vai para fora. Com família aqui dentro, eles podem invadir. Dá para armar um guarda no portão (que pode ser leal ou traidor) e desarmá-lo pelo registro.
+- **Encapuzados:** a partir do dia 4, não aceitam exame. Oferecem o recurso em crise; você decide pela conversa. Podem ser normais, ladrões, informantes do acampamento ou infectados.
+- **Vírus mais forte:** contágio maior dentro da base, e o sintoma só aparece na segunda noite.
 - O progresso é salvo ao fim de cada noite.
 - **Português e inglês:** escolha na tela de abertura (o padrão segue o idioma do aparelho).
 
